@@ -1,0 +1,6 @@
+# Tauri / Rust
+/target
+/gen/schemas
+
+# Tauri Signing-Keys — NIEMALS committen
+*.key

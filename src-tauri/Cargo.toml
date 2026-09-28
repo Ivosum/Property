@@ -1,0 +1,25 @@
+[package]
+name = "property-network"
+version = "0.1.0"
+description = "Property Network Desktop"
+authors = ["Property Network"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# Der Bibliotheks-Crate, den die mobile Auslieferung (Capacitor/Tauri iOS/Android) später mitnutzen kann.
+[lib]
+name = "property_network_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Wird von Tauri gesetzt; nicht manuell aktivieren.
+custom-protocol = ["tauri/custom-protocol"]
