@@ -31,6 +31,16 @@ const formatSize = (bytes: number | null) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// Öffnet ein Dokument: direkte URL oder (bei Storage-Pfad) signierte URL aus 'pm-documents'
+const openDocument = async (fileUrl: string) => {
+  if (/^https?:\/\//i.test(fileUrl)) {
+    window.open(fileUrl, "_blank", "noopener");
+    return;
+  }
+  const { data } = await supabase.storage.from("pm-documents").createSignedUrl(fileUrl, 3600);
+  if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
+};
+
 const Documents = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -130,8 +140,8 @@ const Documents = () => {
                       </p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" asChild>
-                    <a href={doc.file_url} download><Download className="w-4 h-4" /></a>
+                  <Button variant="ghost" size="icon" onClick={() => openDocument(doc.file_url)}>
+                    <Download className="w-4 h-4" />
                   </Button>
                 </div>
               ))}

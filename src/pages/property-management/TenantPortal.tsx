@@ -155,6 +155,16 @@ const TenantPortal = () => {
     navigate("/tenant-auth");
   };
 
+  // Öffnet ein Mieter-Dokument: direkte URL oder signierte URL aus 'pm-documents'
+  const openTenantDoc = async (fileUrl: string) => {
+    if (/^https?:\/\//i.test(fileUrl)) {
+      window.open(fileUrl, "_blank", "noopener");
+      return;
+    }
+    const { data } = await supabase.storage.from("pm-documents").createSignedUrl(fileUrl, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
+  };
+
   const handleSubmitDefect = async () => {
     if (!defectDescription.trim() || !contract) {
       toast.error("Bitte beschreiben Sie den Mangel");
@@ -375,10 +385,8 @@ const TenantPortal = () => {
                             {new Date(doc.created_at).toLocaleDateString("de-CH")}
                           </p>
                         </div>
-                        <Button variant="ghost" size="icon" asChild>
-                          <a href={doc.file_url} download>
-                            <Download className="w-4 h-4" />
-                          </a>
+                        <Button variant="ghost" size="icon" onClick={() => openTenantDoc(doc.file_url)}>
+                          <Download className="w-4 h-4" />
                         </Button>
                       </div>
                     ))}

@@ -122,12 +122,44 @@ Deno.serve(async (req) => {
     const outBytes = await pdfDoc.save();
 
     const tenantSlug = (tenantName || "mietvertrag").replace(/[^a-zA-Z0-9]+/g, "_");
+    const fileName = `Mietvertrag_${tenantSlug}.pdf`;
+
+    // ---------------------------------------------------------------
+    // PDF dauerhaft ablegen: Storage-Bucket 'pm-documents' + pm_documents-Eintrag
+    // Pfad beginnt mit der tenant_id, damit der Mieter seine eigene Datei sehen darf.
+    // Fehler hier dürfen den Download nicht verhindern -> best effort.
+    // ---------------------------------------------------------------
+    try {
+      const folder = contract.tenant_id ?? "allgemein";
+      const storagePath = `${folder}/Mietvertrag_${tenantSlug}_${Date.now()}.pdf`;
+
+      const { error: upErr } = await admin.storage
+        .from("pm-documents")
+        .upload(storagePath, outBytes, { contentType: "application/pdf", upsert: false });
+
+      if (!upErr) {
+        await admin.from("pm_documents").insert({
+          name: fileName,
+          document_type: "contract",
+          file_url: storagePath, // Storage-Pfad; signierte URL wird beim Abruf erzeugt
+          file_size: outBytes.byteLength,
+          contract_id: contract.id,
+          tenant_id: contract.tenant_id ?? null,
+          unit_id: contract.unit_id ?? null,
+          property_id: unit?.property_id ?? null,
+          uploaded_by: userData.user.id,
+        });
+      }
+    } catch (_e) {
+      // Ablage fehlgeschlagen -> Download trotzdem zurückgeben
+    }
+
     return new Response(outBytes, {
       status: 200,
       headers: {
         ...corsHeaders,
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Mietvertrag_${tenantSlug}.pdf"`,
+        "Content-Disposition": `attachment; filename="${fileName}"`,
       },
     });
   } catch (e) {
