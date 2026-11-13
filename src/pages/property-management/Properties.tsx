@@ -1,15 +1,53 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Building2, MapPin, Users } from "lucide-react";
+import { Plus, Building2, MapPin, Users, Loader2 } from "lucide-react";
+
+interface PmProperty {
+  id: string;
+  name: string;
+  city: string;
+  property_type: string;
+  units: number;
+  occupied: number;
+}
 
 const Properties = () => {
-  const properties = [
-    { id: 1, name: "Bahnhofstrasse 12", city: "Zürich", units: 12, occupied: 11, type: "Mehrfamilienhaus" },
-    { id: 2, name: "Seestrasse 45", city: "Zürich", units: 8, occupied: 8, type: "Mehrfamilienhaus" },
-    { id: 3, name: "Hauptstrasse 8", city: "Winterthur", units: 6, occupied: 5, type: "Geschäftshaus" },
-    { id: 4, name: "Bergweg 23", city: "Bern", units: 4, occupied: 4, type: "Mehrfamilienhaus" },
-  ];
+  const { data: properties, isLoading } = useQuery({
+    queryKey: ["pm-properties"],
+    queryFn: async () => {
+      const [{ data: props, error: pErr }, { data: units, error: uErr }] = await Promise.all([
+        supabase.from("pm_properties").select("id, name, city, property_type, total_units"),
+        supabase.from("pm_units").select("property_id, status"),
+      ]);
+      if (pErr) throw pErr;
+      if (uErr) throw uErr;
+
+      const unitsByProp = new Map<string, { total: number; occupied: number }>();
+      (units ?? []).forEach((u) => {
+        const rec = unitsByProp.get(u.property_id) ?? { total: 0, occupied: 0 };
+        rec.total++;
+        if (u.status === "occupied") rec.occupied++;
+        unitsByProp.set(u.property_id, rec);
+      });
+
+      return (props ?? []).map((p) => {
+        const u = unitsByProp.get(p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          city: p.city,
+          property_type: p.property_type,
+          units: u?.total ?? p.total_units ?? 0,
+          occupied: u?.occupied ?? 0,
+        };
+      }) as PmProperty[];
+    },
+  });
+
+  const list = properties ?? [];
 
   return (
     <PropertyManagementLayout>
@@ -24,39 +62,56 @@ const Properties = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {properties.map((property) => (
-          <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Building2 className="w-6 h-6 text-primary" />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" />
+          Liegenschaften werden geladen...
+        </div>
+      ) : list.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <Building2 className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-lg font-semibold">Noch keine Liegenschaften</h3>
+          <p className="text-muted-foreground mt-1 max-w-md">
+            Fügen Sie Ihre erste Liegenschaft hinzu, um loszulegen.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {list.map((property) => (
+            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-primary" />
+                  </div>
+                  <span className="text-xs px-2 py-1 bg-secondary rounded-full">{property.property_type}</span>
                 </div>
-                <span className="text-xs px-2 py-1 bg-secondary rounded-full">{property.type}</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="text-lg mb-2">{property.name}</CardTitle>
-              <div className="flex items-center gap-1 text-sm text-muted-foreground mb-4">
-                <MapPin className="w-4 h-4" />
-                {property.city}
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center gap-1 text-sm">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <span>{property.occupied}/{property.units} belegt</span>
+              </CardHeader>
+              <CardContent>
+                <CardTitle className="text-lg mb-2">{property.name}</CardTitle>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mb-4">
+                  <MapPin className="w-4 h-4" />
+                  {property.city}
                 </div>
-                <div className="w-16 h-2 bg-secondary rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary rounded-full"
-                    style={{ width: `${(property.occupied / property.units) * 100}%` }}
-                  />
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="flex items-center gap-1 text-sm">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                    <span>{property.occupied}/{property.units} belegt</span>
+                  </div>
+                  <div className="w-16 h-2 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full"
+                      style={{ width: `${property.units > 0 ? (property.occupied / property.units) * 100 : 0}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </PropertyManagementLayout>
   );
 };

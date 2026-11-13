@@ -1,61 +1,66 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import OffMarketLayout from "@/components/off-market/OffMarketLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MapPin, Home, Bed, Maximize } from "lucide-react";
+import { Search, Filter, MapPin, Home, Bed, Maximize, Building2, Loader2 } from "lucide-react";
 
-// Mock data for demonstration
-const mockProperties = [
-  {
-    id: "1",
-    title: "Luxusvilla mit Seesicht",
-    city: "Zürich",
-    canton: "ZH",
-    price: 4500000,
-    rooms: 7,
-    living_area_sqm: 320,
-    property_type: "Villa",
-    featured_image_url: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800",
-    status: "active",
-  },
-  {
-    id: "2",
-    title: "Moderne Stadtwohnung",
-    city: "Basel",
-    canton: "BS",
-    price: 1850000,
-    rooms: 4.5,
-    living_area_sqm: 145,
-    property_type: "Wohnung",
-    featured_image_url: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800",
-    status: "active",
-  },
-  {
-    id: "3",
-    title: "Chalet in den Alpen",
-    city: "Zermatt",
-    canton: "VS",
-    price: 3200000,
-    rooms: 5,
-    living_area_sqm: 210,
-    property_type: "Chalet",
-    featured_image_url: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=800",
-    status: "active",
-  },
-];
+interface PropertyRow {
+  id: string;
+  title: string;
+  city: string;
+  canton: string;
+  price: number;
+  rooms: number | null;
+  living_area_sqm: number | null;
+  property_type: string;
+  featured_image_url: string | null;
+  status: string;
+}
+
+const typeLabels: Record<string, string> = {
+  apartment: "Wohnung",
+  house: "Haus",
+  commercial: "Gewerbe",
+  land: "Bauland",
+  other: "Objekt",
+};
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("de-CH", {
+  const { data: properties, isLoading } = useQuery({
+    queryKey: ["off-market-properties"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id, title, city, canton, price, rooms, living_area_sqm, property_type, featured_image_url, status")
+        .eq("is_off_market", true)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as PropertyRow[];
+    },
+  });
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat("de-CH", {
       style: "currency",
       currency: "CHF",
       maximumFractionDigits: 0,
     }).format(price);
-  };
+
+  const term = searchTerm.trim().toLowerCase();
+  const filtered = (properties ?? []).filter((p) => {
+    if (!term) return true;
+    return (
+      p.title?.toLowerCase().includes(term) ||
+      p.city?.toLowerCase().includes(term) ||
+      p.canton?.toLowerCase().includes(term)
+    );
+  });
 
   return (
     <OffMarketLayout>
@@ -83,58 +88,79 @@ const Properties = () => {
         </Button>
       </div>
 
-      {/* Properties Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockProperties.map((property) => (
-          <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
-            <div className="relative h-48">
-              <img
-                src={property.featured_image_url}
-                alt={property.title}
-                className="w-full h-full object-cover"
-              />
-              <Badge className="absolute top-3 left-3 bg-primary">
-                Off-Market
-              </Badge>
-            </div>
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg">{property.title}</CardTitle>
-                  <CardDescription className="flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3" />
-                    {property.city}, {property.canton}
-                  </CardDescription>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" />
+          Immobilien werden geladen...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <Building2 className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-lg font-semibold">Noch keine Immobilien</h3>
+          <p className="text-muted-foreground mt-1 max-w-md">
+            {term
+              ? "Keine Immobilien entsprechen Ihrer Suche."
+              : "Sobald Objekte eingestellt und freigeschaltet sind, erscheinen sie hier."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filtered.map((property) => (
+            <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
+              <div className="relative h-48 bg-muted">
+                {property.featured_image_url ? (
+                  <img
+                    src={property.featured_image_url}
+                    alt={property.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Building2 className="w-10 h-10 text-muted-foreground/40" />
+                  </div>
+                )}
+                <Badge className="absolute top-3 left-3 bg-primary">Off-Market</Badge>
+              </div>
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-lg">{property.title}</CardTitle>
+                    <CardDescription className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3" />
+                      {property.city}, {property.canton}
+                    </CardDescription>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-primary mb-3">
-                {formatPrice(property.price)}
-              </p>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Home className="w-4 h-4" />
-                  {property.property_type}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Bed className="w-4 h-4" />
-                  {property.rooms} Zimmer
-                </span>
-                <span className="flex items-center gap-1">
-                  <Maximize className="w-4 h-4" />
-                  {property.living_area_sqm} m²
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Empty State for real data */}
-      <div className="text-center py-8 text-muted-foreground mt-8 border-t">
-        <p className="text-sm">Dies sind Beispiel-Immobilien zur Demonstration.</p>
-      </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-primary mb-3">
+                  {formatPrice(property.price)}
+                </p>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    {typeLabels[property.property_type] ?? property.property_type}
+                  </span>
+                  {property.rooms != null && (
+                    <span className="flex items-center gap-1">
+                      <Bed className="w-4 h-4" />
+                      {property.rooms} Zimmer
+                    </span>
+                  )}
+                  {property.living_area_sqm != null && (
+                    <span className="flex items-center gap-1">
+                      <Maximize className="w-4 h-4" />
+                      {property.living_area_sqm} m²
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </OffMarketLayout>
   );
 };

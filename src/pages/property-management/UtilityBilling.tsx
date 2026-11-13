@@ -1,15 +1,57 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, FileText, Send, CheckCircle } from "lucide-react";
+import { Calculator, FileText, Clock, CheckCircle, Loader2 } from "lucide-react";
+
+interface BillingRow {
+  id: string;
+  property: string;
+  year: number;
+  total: number;
+  status: string;
+}
+
+const statusLabels: Record<string, string> = {
+  draft: "In Bearbeitung",
+  created: "Erstellt",
+  completed: "Abgeschlossen",
+  pending: "Ausstehend",
+};
+
+const formatCHF = (n: number) =>
+  new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
 
 const UtilityBilling = () => {
-  const billings = [
-    { property: "Bahnhofstrasse 12", period: "2025", units: 12, status: "Erstellt", sent: "10/12" },
-    { property: "Seestrasse 45", period: "2025", units: 8, status: "In Bearbeitung", sent: "0/8" },
-    { property: "Hauptstrasse 8", period: "2025", units: 6, status: "Ausstehend", sent: "0/6" },
-    { property: "Bergweg 23", period: "2024", units: 4, status: "Abgeschlossen", sent: "4/4" },
-  ];
+  const { data, isLoading } = useQuery({
+    queryKey: ["pm-utility-bills"],
+    queryFn: async () => {
+      const [{ data: bills }, { data: props }] = await Promise.all([
+        supabase.from("pm_utility_bills").select("id, property_id, billing_year, total_costs, status").order("billing_year", { ascending: false }),
+        supabase.from("pm_properties").select("id, name"),
+      ]);
+      const propName = new Map((props ?? []).map((p) => [p.id, p.name]));
+
+      const rows = (bills ?? []).map((b) => ({
+        id: b.id,
+        property: propName.get(b.property_id) ?? "–",
+        year: b.billing_year,
+        total: b.total_costs,
+        status: statusLabels[b.status] ?? b.status,
+        rawStatus: b.status,
+      }));
+
+      const currentYear = new Date().getFullYear();
+      const thisYear = (bills ?? []).filter((b) => b.billing_year === currentYear).length;
+      const open = (bills ?? []).filter((b) => b.status !== "completed").length;
+      const done = (bills ?? []).filter((b) => b.status === "completed").length;
+
+      return { rows, thisYear, open, done };
+    },
+  });
+
+  const rows = data?.rows ?? [];
 
   return (
     <PropertyManagementLayout>
@@ -33,8 +75,8 @@ const UtilityBilling = () => {
                 <FileText className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">30</p>
-                <p className="text-sm text-muted-foreground">Abrechnungen 2025</p>
+                <p className="text-2xl font-bold">{isLoading ? "–" : data?.thisYear ?? 0}</p>
+                <p className="text-sm text-muted-foreground">Abrechnungen {new Date().getFullYear()}</p>
               </div>
             </div>
           </CardContent>
@@ -43,11 +85,11 @@ const UtilityBilling = () => {
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <Send className="w-6 h-6 text-orange-600" />
+                <Clock className="w-6 h-6 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">14</p>
-                <p className="text-sm text-muted-foreground">Noch zu versenden</p>
+                <p className="text-2xl font-bold">{isLoading ? "–" : data?.open ?? 0}</p>
+                <p className="text-sm text-muted-foreground">In Bearbeitung</p>
               </div>
             </div>
           </CardContent>
@@ -59,8 +101,8 @@ const UtilityBilling = () => {
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">16</p>
-                <p className="text-sm text-muted-foreground">Versendet</p>
+                <p className="text-2xl font-bold">{isLoading ? "–" : data?.done ?? 0}</p>
+                <p className="text-sm text-muted-foreground">Abgeschlossen</p>
               </div>
             </div>
           </CardContent>
@@ -72,30 +114,41 @@ const UtilityBilling = () => {
           <CardTitle>Abrechnungsübersicht</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {billings.map((billing, i) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
-                <div>
-                  <p className="font-medium">{billing.property}</p>
-                  <p className="text-sm text-muted-foreground">Abrechnungszeitraum: {billing.period} • {billing.units} Einheiten</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              Abrechnungen werden geladen...
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+              <Calculator className="w-10 h-10 mb-3 opacity-40" />
+              <p>Noch keine Nebenkostenabrechnungen erstellt.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {rows.map((billing) => (
+                <div key={billing.id} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg flex-wrap gap-4">
+                  <div>
+                    <p className="font-medium">{billing.property}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Abrechnungszeitraum: {billing.year} • Gesamtkosten: {formatCHF(billing.total)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
                     <span className={`text-xs px-2 py-1 rounded-full ${
-                      billing.status === "Abgeschlossen" ? "bg-green-100 text-green-700" :
-                      billing.status === "Erstellt" ? "bg-primary/20 text-primary" :
-                      billing.status === "In Bearbeitung" ? "bg-orange-100 text-orange-700" :
+                      billing.rawStatus === "completed" ? "bg-green-100 text-green-700" :
+                      billing.rawStatus === "created" ? "bg-primary/20 text-primary" :
+                      billing.rawStatus === "draft" ? "bg-orange-100 text-orange-700" :
                       "bg-secondary text-muted-foreground"
                     }`}>
                       {billing.status}
                     </span>
-                    <p className="text-xs text-muted-foreground mt-1">Versendet: {billing.sent}</p>
+                    <Button variant="outline" size="sm">Bearbeiten</Button>
                   </div>
-                  <Button variant="outline" size="sm">Bearbeiten</Button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </PropertyManagementLayout>

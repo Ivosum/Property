@@ -1,22 +1,46 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Download, FileText, TrendingUp, PieChart } from "lucide-react";
+import { BarChart3, TrendingUp, PieChart, FileText } from "lucide-react";
+
+const formatCHF = (n: number) => {
+  if (n >= 1_000_000) return `CHF ${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `CHF ${(n / 1_000).toFixed(0)}K`;
+  return new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
+};
 
 const Reports = () => {
-  const reports = [
-    { name: "Monatsübersicht Februar 2026", type: "Finanzübersicht", date: "05.02.2026", icon: BarChart3 },
-    { name: "Auslastungsreport Q1 2026", type: "Belegung", date: "01.02.2026", icon: PieChart },
-    { name: "Mängelstatistik 2025", type: "Wartung", date: "15.01.2026", icon: FileText },
-    { name: "Jahresabschluss 2025", type: "Jahresbericht", date: "10.01.2026", icon: TrendingUp },
-  ];
+  const { data } = useQuery({
+    queryKey: ["pm-reports-stats"],
+    queryFn: async () => {
+      const currentYear = new Date().getFullYear();
+      const [{ data: units }, { data: contracts }, { data: payments }] = await Promise.all([
+        supabase.from("pm_units").select("status"),
+        supabase.from("pm_contracts").select("status"),
+        supabase.from("pm_payments").select("amount, status, paid_date"),
+      ]);
+
+      const occupied = (units ?? []).filter((u) => u.status === "occupied").length;
+      const occupancyRate = (units ?? []).length > 0 ? Math.round((occupied / (units ?? []).length) * 100) : 0;
+
+      const activeContracts = (contracts ?? []).filter((c) => c.status === "active").length;
+
+      const yearIncome = (payments ?? [])
+        .filter((p) => p.status === "paid" && p.paid_date && new Date(p.paid_date).getFullYear() === currentYear)
+        .reduce((s, p) => s + p.amount, 0);
+
+      return { occupancyRate, activeContracts, yearIncome, currentYear };
+    },
+  });
 
   return (
     <PropertyManagementLayout>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="font-display text-3xl font-bold">Berichte</h1>
-          <p className="text-muted-foreground mt-1">Analysen und automatisierte Reports</p>
+          <p className="text-muted-foreground mt-1">Analysen und Kennzahlen</p>
         </div>
         <Button>
           <BarChart3 className="w-4 h-4 mr-2" />
@@ -30,7 +54,7 @@ const Reports = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold">98%</p>
+                <p className="text-3xl font-bold">{data ? `${data.occupancyRate}%` : "–"}</p>
                 <p className="text-sm text-muted-foreground">Auslastung</p>
               </div>
               <TrendingUp className="w-8 h-8 text-primary" />
@@ -41,8 +65,8 @@ const Reports = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold">CHF 2.9M</p>
-                <p className="text-sm text-muted-foreground">Jahreseinnahmen 2025</p>
+                <p className="text-3xl font-bold">{data ? formatCHF(data.yearIncome) : "–"}</p>
+                <p className="text-sm text-muted-foreground">Einnahmen {data?.currentYear ?? ""}</p>
               </div>
               <BarChart3 className="w-8 h-8 text-green-500" />
             </div>
@@ -52,7 +76,7 @@ const Reports = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold">156</p>
+                <p className="text-3xl font-bold">{data ? data.activeContracts : "–"}</p>
                 <p className="text-sm text-muted-foreground">Aktive Mietverhältnisse</p>
               </div>
               <PieChart className="w-8 h-8 text-primary" />
@@ -64,27 +88,13 @@ const Reports = () => {
       {/* Reports List */}
       <Card>
         <CardHeader>
-          <CardTitle>Verfügbare Berichte</CardTitle>
+          <CardTitle>Gespeicherte Berichte</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {reports.map((report, i) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <report.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{report.name}</p>
-                    <p className="text-sm text-muted-foreground">{report.type} • {report.date}</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-2" />
-                  Herunterladen
-                </Button>
-              </div>
-            ))}
+          <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+            <FileText className="w-10 h-10 mb-3 opacity-40" />
+            <p>Noch keine Berichte erstellt.</p>
+            <p className="text-sm mt-1">Erstellen Sie Ihren ersten Report über „Report erstellen".</p>
           </div>
         </CardContent>
       </Card>

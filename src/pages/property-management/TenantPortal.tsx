@@ -30,6 +30,7 @@ interface ContractData {
   base_rent: number;
   utilities_advance: number | null;
   start_date: string;
+  unit_id: string;
   unit: {
     unit_number: string;
     property: {
@@ -39,12 +40,29 @@ interface ContractData {
   };
 }
 
+interface PaymentData {
+  id: string;
+  amount: number;
+  due_date: string;
+  paid_date: string | null;
+  status: string;
+}
+
+interface TenantDocData {
+  id: string;
+  name: string;
+  file_url: string;
+  created_at: string;
+}
+
 const TenantPortal = () => {
   const navigate = useNavigate();
   const [defectDescription, setDefectDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [tenant, setTenant] = useState<TenantData | null>(null);
   const [contract, setContract] = useState<ContractData | null>(null);
+  const [payments, setPayments] = useState<PaymentData[]>([]);
+  const [tenantDocs, setTenantDocs] = useState<TenantDocData[]>([]);
 
   useEffect(() => {
     checkAuthAndLoadData();
@@ -73,6 +91,22 @@ const TenantPortal = () => {
     }
 
     setTenant(tenantData);
+
+    // Load payments and documents for this tenant
+    const [{ data: paymentData }, { data: docData }] = await Promise.all([
+      supabase
+        .from("pm_payments")
+        .select("id, amount, due_date, paid_date, status")
+        .eq("tenant_id", tenantData.id)
+        .order("due_date", { ascending: false }),
+      supabase
+        .from("pm_documents")
+        .select("id, name, file_url, created_at")
+        .eq("tenant_id", tenantData.id)
+        .order("created_at", { ascending: false }),
+    ]);
+    setPayments((paymentData ?? []) as PaymentData[]);
+    setTenantDocs((docData ?? []) as TenantDocData[]);
 
     // Load active contract with unit and property info
     const { data: contractData } = await supabase
@@ -127,9 +161,26 @@ const TenantPortal = () => {
       return;
     }
 
-    // Note: Tenant may not have direct insert access - would need RLS update or edge function
+    const title = defectDescription.trim().slice(0, 80);
+    const { error } = await supabase.from("pm_defects").insert({
+      unit_id: contract.unit_id,
+      tenant_id: tenant?.id ?? null,
+      title,
+      description: defectDescription.trim(),
+      reported_by_name: tenant ? `${tenant.first_name} ${tenant.last_name}`.trim() : null,
+      priority: "normal",
+      status: "open",
+    });
+
+    if (error) {
+      toast.error("Meldung konnte nicht gespeichert werden", {
+        description: "Bitte kontaktieren Sie Ihre Hausverwaltung direkt.",
+      });
+      return;
+    }
+
     toast.success("Meldung wurde übermittelt", {
-      description: "Ihre Hausverwaltung wird sich in Kürze bei Ihnen melden."
+      description: "Ihre Hausverwaltung wird sich in Kürze bei Ihnen melden.",
     });
     setDefectDescription("");
   };
@@ -146,19 +197,20 @@ const TenantPortal = () => {
   }
 
   const totalRent = (contract?.base_rent || 0) + (contract?.utilities_advance || 0);
+  const formatCHF = (n: number) => `CHF ${n.toLocaleString("de-CH")}`;
 
-  // Mock payment data - would come from pm_payments in real implementation
-  const payments = [
-    { month: "Februar 2026", amount: `CHF ${totalRent.toLocaleString("de-CH")}`, status: "Bezahlt", date: "01.02.2026" },
-    { month: "Januar 2026", amount: `CHF ${totalRent.toLocaleString("de-CH")}`, status: "Bezahlt", date: "02.01.2026" },
-    { month: "Dezember 2025", amount: `CHF ${totalRent.toLocaleString("de-CH")}`, status: "Bezahlt", date: "01.12.2025" },
-  ];
+  const statusLabels: Record<string, string> = {
+    paid: "Bezahlt",
+    pending: "Ausstehend",
+    overdue: "Überfällig",
+    cancelled: "Storniert",
+  };
 
-  const documents = [
-    { name: "Mietvertrag", date: contract?.start_date ? new Date(contract.start_date).toLocaleDateString("de-CH") : "-" },
-    { name: "Nebenkostenabrechnung 2024", date: "15.03.2025" },
-    { name: "Hausordnung", date: contract?.start_date ? new Date(contract.start_date).toLocaleDateString("de-CH") : "-" },
-  ];
+  const openPayments = payments.filter((p) => p.status === "pending" || p.status === "overdue");
+  const nextDue = [...openPayments].sort(
+    (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+  )[0];
+  const allPaid = openPayments.length === 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -206,32 +258,68 @@ const TenantPortal = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 mb-4 flex items-center gap-3">
-                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-                  <div>
-                    <p className="font-medium text-green-800 dark:text-green-200">Alle Zahlungen aktuell</p>
-                    <p className="text-sm text-green-600 dark:text-green-400">
-                      Nächste Zahlung fällig am 01.03.2026: CHF {totalRent.toLocaleString("de-CH")}
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {payments.map((payment, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                      <div>
-                        <p className="font-medium">{payment.month}</p>
-                        <p className="text-sm text-muted-foreground">Bezahlt am {payment.date}</p>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Es sind noch keine Zahlungen erfasst.
+                  </p>
+                ) : (
+                  <>
+                    {allPaid ? (
+                      <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 mb-4 flex items-center gap-3">
+                        <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        <div>
+                          <p className="font-medium text-green-800 dark:text-green-200">Alle Zahlungen aktuell</p>
+                          <p className="text-sm text-green-600 dark:text-green-400">
+                            Keine offenen Zahlungen.
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <p className="font-semibold">{payment.amount}</p>
-                        <span className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded-full flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          {payment.status}
-                        </span>
+                    ) : (
+                      <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 mb-4 flex items-center gap-3">
+                        <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                        <div>
+                          <p className="font-medium text-orange-800 dark:text-orange-200">
+                            {openPayments.length} offene Zahlung{openPayments.length > 1 ? "en" : ""}
+                          </p>
+                          {nextDue && (
+                            <p className="text-sm text-orange-600 dark:text-orange-400">
+                              Nächste fällig am {new Date(nextDue.due_date).toLocaleDateString("de-CH")}: {formatCHF(nextDue.amount)}
+                            </p>
+                          )}
+                        </div>
                       </div>
+                    )}
+                    <div className="space-y-3">
+                      {payments.map((payment) => (
+                        <div key={payment.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                          <div>
+                            <p className="font-medium">
+                              Fällig {new Date(payment.due_date).toLocaleDateString("de-CH")}
+                            </p>
+                            {payment.paid_date && (
+                              <p className="text-sm text-muted-foreground">
+                                Bezahlt am {new Date(payment.paid_date).toLocaleDateString("de-CH")}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="font-semibold">{formatCHF(payment.amount)}</p>
+                            <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                              payment.status === "paid"
+                                ? "bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300"
+                                : payment.status === "overdue"
+                                ? "bg-destructive/20 text-destructive"
+                                : "bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                            }`}>
+                              {payment.status === "paid" && <CheckCircle className="w-3 h-3" />}
+                              {statusLabels[payment.status] ?? payment.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -273,19 +361,29 @@ const TenantPortal = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {documents.map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                      <div>
-                        <p className="font-medium text-sm">{doc.name}</p>
-                        <p className="text-xs text-muted-foreground">{doc.date}</p>
+                {tenantDocs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Noch keine Dokumente verfügbar.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {tenantDocs.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                        <div>
+                          <p className="font-medium text-sm">{doc.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(doc.created_at).toLocaleDateString("de-CH")}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="icon" asChild>
+                          <a href={doc.file_url} download>
+                            <Download className="w-4 h-4" />
+                          </a>
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="icon">
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

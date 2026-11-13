@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import OffMarketLayout from "@/components/off-market/OffMarketLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, Users, Building2, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { BarChart3, Users, Building2, TrendingUp } from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -38,6 +40,51 @@ const PRIMARY = "hsl(25 75% 47%)";
 const GOLD = "hsl(42 87% 55%)";
 
 const AdminAnalytics = () => {
+  const { data: stats } = useQuery({
+    queryKey: ["analytics-stats"],
+    queryFn: async () => {
+      const [users, properties, roles, kyc, cantons] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("properties").select("id", { count: "exact", head: true }),
+        supabase.from("user_roles").select("role"),
+        supabase.from("profiles").select("kyc_status"),
+        supabase.from("properties").select("canton"),
+      ]);
+      const roleCounts = { buyer: 0, seller: 0, broker: 0 };
+      (roles.data ?? []).forEach((r) => {
+        if (r.role in roleCounts) (roleCounts as Record<string, number>)[r.role]++;
+      });
+      const kycCounts = { verified: 0, submitted: 0, pending: 0 };
+      (kyc.data ?? []).forEach((p) => {
+        const s = p.kyc_status ?? "pending";
+        if (s === "verified") kycCounts.verified++;
+        else if (s === "submitted") kycCounts.submitted++;
+        else kycCounts.pending++;
+      });
+      const cantonMap = new Map<string, number>();
+      (cantons.data ?? []).forEach((c) => {
+        if (!c.canton) return;
+        cantonMap.set(c.canton, (cantonMap.get(c.canton) ?? 0) + 1);
+      });
+      const topCantons = [...cantonMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([canton, count]) => ({ canton, count }));
+      return {
+        users: users.count ?? 0,
+        properties: properties.count ?? 0,
+        roleCounts,
+        kycCounts,
+        topCantons,
+      };
+    },
+  });
+
+  const totalRoles = stats
+    ? stats.roleCounts.buyer + stats.roleCounts.seller + stats.roleCounts.broker
+    : 0;
+  const pct = (n: number) => (totalRoles > 0 ? Math.round((n / totalRoles) * 100) : 0);
+
   return (
     <OffMarketLayout>
       <div className="mb-8">
@@ -54,10 +101,9 @@ const AdminAnalytics = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Gesamte Nutzer</p>
-                <p className="text-3xl font-bold mt-1">127</p>
-                <div className="flex items-center gap-1 text-sm text-primary mt-1">
-                  <ArrowUpRight className="w-4 h-4" />
-                  <span>+12% diesen Monat</span>
+                <p className="text-3xl font-bold mt-1">{stats?.users ?? "–"}</p>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <span>Registrierte Konten</span>
                 </div>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -71,11 +117,10 @@ const AdminAnalytics = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Aktive Immobilien</p>
-                <p className="text-3xl font-bold mt-1">45</p>
-                <div className="flex items-center gap-1 text-sm text-primary mt-1">
-                  <ArrowUpRight className="w-4 h-4" />
-                  <span>+8% diesen Monat</span>
+                <p className="text-sm text-muted-foreground">Immobilien</p>
+                <p className="text-3xl font-bold mt-1">{stats?.properties ?? "–"}</p>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <span>Eingestellte Objekte</span>
                 </div>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -89,11 +134,10 @@ const AdminAnalytics = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Transaktionen</p>
-                <p className="text-3xl font-bold mt-1">8</p>
-                <div className="flex items-center gap-1 text-sm text-destructive mt-1">
-                  <ArrowDownRight className="w-4 h-4" />
-                  <span>-3% diesen Monat</span>
+                <p className="text-sm text-muted-foreground">Verifiziert</p>
+                <p className="text-3xl font-bold mt-1">{stats?.kycCounts.verified ?? "–"}</p>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <span>KYC abgeschlossen</span>
                 </div>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -107,11 +151,10 @@ const AdminAnalytics = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Umsatz (CHF)</p>
-                <p className="text-3xl font-bold mt-1">285K</p>
-                <div className="flex items-center gap-1 text-sm text-primary mt-1">
-                  <ArrowUpRight className="w-4 h-4" />
-                  <span>+24% diesen Monat</span>
+                <p className="text-sm text-muted-foreground">In Prüfung</p>
+                <p className="text-3xl font-bold mt-1">{stats?.kycCounts.submitted ?? "–"}</p>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <span>Wartet auf Freigabe</span>
                 </div>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -199,27 +242,36 @@ const AdminAnalytics = () => {
                 <span>Käufer</span>
                 <div className="flex items-center gap-2">
                   <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="w-[60%] h-full bg-primary rounded-full" />
+                    <div
+                      className="h-full bg-primary rounded-full"
+                      style={{ width: `${pct(stats?.roleCounts.buyer ?? 0)}%` }}
+                    />
                   </div>
-                  <span className="text-sm font-medium">76</span>
+                  <span className="text-sm font-medium">{stats?.roleCounts.buyer ?? 0}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span>Verkäufer</span>
                 <div className="flex items-center gap-2">
                   <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="w-[30%] h-full bg-primary rounded-full" />
+                    <div
+                      className="h-full bg-primary rounded-full"
+                      style={{ width: `${pct(stats?.roleCounts.seller ?? 0)}%` }}
+                    />
                   </div>
-                  <span className="text-sm font-medium">38</span>
+                  <span className="text-sm font-medium">{stats?.roleCounts.seller ?? 0}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span>Makler</span>
                 <div className="flex items-center gap-2">
                   <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="w-[10%] h-full bg-primary rounded-full" />
+                    <div
+                      className="h-full bg-primary rounded-full"
+                      style={{ width: `${pct(stats?.roleCounts.broker ?? 0)}%` }}
+                    />
                   </div>
-                  <span className="text-sm font-medium">13</span>
+                  <span className="text-sm font-medium">{stats?.roleCounts.broker ?? 0}</span>
                 </div>
               </div>
             </div>
@@ -235,15 +287,15 @@ const AdminAnalytics = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-primary">Verifiziert</span>
-                <span className="font-medium">89</span>
+                <span className="font-medium">{stats?.kycCounts.verified ?? 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-amber-600">In Prüfung</span>
-                <span className="font-medium">23</span>
+                <span className="font-medium">{stats?.kycCounts.submitted ?? 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Ausstehend</span>
-                <span className="font-medium">15</span>
+                <span className="font-medium">{stats?.kycCounts.pending ?? 0}</span>
               </div>
             </div>
           </CardContent>
@@ -255,24 +307,18 @@ const AdminAnalytics = () => {
             <CardDescription>Nach Immobilien</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span>Zürich (ZH)</span>
-                <span className="font-medium">18</span>
+            {stats && stats.topCantons.length > 0 ? (
+              <div className="space-y-4">
+                {stats.topCantons.map((c) => (
+                  <div key={c.canton} className="flex items-center justify-between">
+                    <span>{c.canton}</span>
+                    <span className="font-medium">{c.count}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between">
-                <span>Genf (GE)</span>
-                <span className="font-medium">12</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Wallis (VS)</span>
-                <span className="font-medium">8</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Basel (BS)</span>
-                <span className="font-medium">7</span>
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4">Noch keine Immobilien erfasst.</p>
+            )}
           </CardContent>
         </Card>
       </div>

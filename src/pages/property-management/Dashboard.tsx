@@ -1,16 +1,78 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, FileText, CreditCard, AlertTriangle, TrendingUp } from "lucide-react";
+import { Building2, Users, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
+
+const formatCHF = (n: number) =>
+  new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
+
+const priorityLabels: Record<string, string> = { low: "Niedrig", normal: "Normal", urgent: "Dringend" };
 
 const Dashboard = () => {
   const { profile } = useAuth();
 
+  const { data, isLoading } = useQuery({
+    queryKey: ["pm-dashboard"],
+    queryFn: async () => {
+      const [propsRes, unitsRes, tenantsRes, defectsRes, paymentsRes] = await Promise.all([
+        supabase.from("pm_properties").select("id", { count: "exact", head: true }),
+        supabase.from("pm_units").select("status"),
+        supabase.from("pm_tenants").select("id", { count: "exact", head: true }),
+        supabase.from("pm_defects").select("id, unit_id, title, priority, status, created_at").in("status", ["open", "in_progress"]).order("created_at", { ascending: false }).limit(5),
+        supabase.from("pm_payments").select("id, tenant_id, amount, due_date, status").in("status", ["pending", "overdue"]).order("due_date", { ascending: true }).limit(5),
+      ]);
+
+      const units = unitsRes.data ?? [];
+      const occupied = units.filter((u) => u.status === "occupied").length;
+      const occupancyRate = units.length > 0 ? Math.round((occupied / units.length) * 100) : 0;
+
+      const urgentDefects = (defectsRes.data ?? []).filter((d) => d.priority === "urgent").length;
+
+      // Namen/Einheiten für die Listen
+      const unitIds = (defectsRes.data ?? []).map((d) => d.unit_id);
+      const tenantIds = (paymentsRes.data ?? []).map((p) => p.tenant_id);
+      const [{ data: unitRows }, { data: tenantRows }] = await Promise.all([
+        unitIds.length ? supabase.from("pm_units").select("id, unit_number").in("id", unitIds) : Promise.resolve({ data: [] as any[] }),
+        tenantIds.length ? supabase.from("pm_tenants").select("id, first_name, last_name").in("id", tenantIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const unitLabel = new Map((unitRows ?? []).map((u) => [u.id, `Einheit ${u.unit_number}`]));
+      const tenantLabel = new Map((tenantRows ?? []).map((t) => [t.id, [t.first_name, t.last_name].filter(Boolean).join(" ") || "Mieter"]));
+
+      const monthlyIncome = (paymentsRes.data ?? []).reduce((s, p) => s + p.amount, 0);
+
+      return {
+        propertyCount: propsRes.count ?? 0,
+        tenantCount: tenantsRes.count ?? 0,
+        occupancyRate,
+        openDefectCount: defectsRes.data?.length ?? 0,
+        urgentDefects,
+        defects: (defectsRes.data ?? []).map((d) => ({
+          id: d.id,
+          unit: unitLabel.get(d.unit_id) ?? "–",
+          issue: d.title,
+          priority: priorityLabels[d.priority] ?? d.priority,
+          rawPriority: d.priority,
+          date: new Date(d.created_at).toLocaleDateString("de-CH"),
+        })),
+        payments: (paymentsRes.data ?? []).map((p) => ({
+          id: p.id,
+          tenant: tenantLabel.get(p.tenant_id) ?? "Mieter",
+          amount: p.amount,
+          due: p.due_date,
+          overdue: p.status === "overdue",
+        })),
+        outstanding: monthlyIncome,
+      };
+    },
+  });
+
   const stats = [
-    { label: "Verwaltete Objekte", value: "24", icon: Building2, change: "+2 diesen Monat" },
-    { label: "Aktive Mieter", value: "156", icon: Users, change: "98% Auslastung" },
-    { label: "Offene Mängel", value: "8", icon: AlertTriangle, change: "3 dringend" },
-    { label: "Monatliche Einnahmen", value: "CHF 245'000", icon: CreditCard, change: "+5.2%" },
+    { label: "Verwaltete Objekte", value: data ? String(data.propertyCount) : "–", icon: Building2 },
+    { label: "Aktive Mieter", value: data ? String(data.tenantCount) : "–", icon: Users, sub: data ? `${data.occupancyRate}% Auslastung` : undefined },
+    { label: "Offene Mängel", value: data ? String(data.openDefectCount) : "–", icon: AlertTriangle, sub: data && data.urgentDefects > 0 ? `${data.urgentDefects} dringend` : undefined },
+    { label: "Offene Zahlungen", value: data ? formatCHF(data.outstanding) : "–", icon: CreditCard },
   ];
 
   return (
@@ -33,11 +95,10 @@ const Dashboard = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                   <stat.icon className="w-6 h-6 text-primary" />
                 </div>
-                <TrendingUp className="w-4 h-4 text-green-500" />
               </div>
               <p className="text-2xl font-bold">{stat.value}</p>
               <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <p className="text-xs text-primary mt-1">{stat.change}</p>
+              {stat.sub && <p className="text-xs text-primary mt-1">{stat.sub}</p>}
             </CardContent>
           </Card>
         ))}
@@ -53,30 +114,34 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {[
-                { unit: "Bahnhofstrasse 12, 3.OG links", issue: "Heizung defekt", priority: "Dringend", date: "vor 2 Tagen" },
-                { unit: "Seestrasse 45, 1.OG", issue: "Wasserhahn tropft", priority: "Normal", date: "vor 5 Tagen" },
-                { unit: "Hauptstrasse 8, EG", issue: "Fenster klemmt", priority: "Niedrig", date: "vor 1 Woche" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-sm">{item.unit}</p>
-                    <p className="text-sm text-muted-foreground">{item.issue}</p>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : (data?.defects.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Keine offenen Mängel.</p>
+            ) : (
+              <div className="space-y-3">
+                {data!.defects.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">{item.unit}</p>
+                      <p className="text-sm text-muted-foreground">{item.issue}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        item.rawPriority === "urgent" ? "bg-destructive/20 text-destructive" :
+                        item.rawPriority === "normal" ? "bg-orange-100 text-orange-700" :
+                        "bg-secondary text-muted-foreground"
+                      }`}>
+                        {item.priority}
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-1">{item.date}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      item.priority === "Dringend" ? "bg-destructive/20 text-destructive" :
-                      item.priority === "Normal" ? "bg-orange-100 text-orange-700" :
-                      "bg-secondary text-muted-foreground"
-                    }`}>
-                      {item.priority}
-                    </span>
-                    <p className="text-xs text-muted-foreground mt-1">{item.date}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -88,26 +153,29 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {[
-                { tenant: "Müller Hans", unit: "Bahnhofstrasse 12, 2.OG", amount: "CHF 1'850", due: "Fällig: 01.02.2026" },
-                { tenant: "Schmidt Anna", unit: "Seestrasse 45, 3.OG", amount: "CHF 2'200", due: "Fällig: 01.02.2026" },
-                { tenant: "Weber Thomas", unit: "Hauptstrasse 8, 1.OG", amount: "CHF 1'650", due: "Überfällig: 15.01.2026" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-sm">{item.tenant}</p>
-                    <p className="text-sm text-muted-foreground">{item.unit}</p>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : (data?.payments.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Keine ausstehenden Zahlungen.</p>
+            ) : (
+              <div className="space-y-3">
+                {data!.payments.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">{item.tenant}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-sm">{formatCHF(item.amount)}</p>
+                      <p className={`text-xs ${item.overdue ? "text-destructive" : "text-muted-foreground"}`}>
+                        {item.overdue ? "Überfällig: " : "Fällig: "}{new Date(item.due).toLocaleDateString("de-CH")}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-sm">{item.amount}</p>
-                    <p className={`text-xs ${item.due.includes("Überfällig") ? "text-destructive" : "text-muted-foreground"}`}>
-                      {item.due}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
