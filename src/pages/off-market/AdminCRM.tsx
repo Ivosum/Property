@@ -271,7 +271,7 @@ const AdminCRM = () => {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Pendente Verifizierungen</CardDescription>
-              <CardTitle className="text-3xl text-accent-foreground">{pendingVerifications}</CardTitle>
+              <CardTitle className="text-3xl text-amber-600">{pendingVerifications}</CardTitle>
             </CardHeader>
           </Card>
           <Card>

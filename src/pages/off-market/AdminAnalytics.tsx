@@ -1,6 +1,41 @@
 import OffMarketLayout from "@/components/off-market/OffMarketLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, Users, Building2, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
+
+// Demo-Daten für die Diagramme (Beispielwerte zur Darstellung)
+const registrationsData = [
+  { monat: "Jul", nutzer: 12 },
+  { monat: "Aug", nutzer: 19 },
+  { monat: "Sep", nutzer: 15 },
+  { monat: "Okt", nutzer: 27 },
+  { monat: "Nov", nutzer: 31 },
+  { monat: "Dez", nutzer: 23 },
+];
+
+const activityData = [
+  { monat: "Jul", listings: 8, transaktionen: 2 },
+  { monat: "Aug", listings: 11, transaktionen: 3 },
+  { monat: "Sep", listings: 9, transaktionen: 1 },
+  { monat: "Okt", listings: 14, transaktionen: 4 },
+  { monat: "Nov", listings: 17, transaktionen: 5 },
+  { monat: "Dez", listings: 12, transaktionen: 3 },
+];
+
+// Bronze/Primary-Farbe passend zum Design
+const PRIMARY = "hsl(25 75% 47%)";
+const GOLD = "hsl(42 87% 55%)";
 
 const AdminAnalytics = () => {
   return (
@@ -95,8 +130,32 @@ const AdminAnalytics = () => {
             <CardDescription>Neue Nutzer pro Monat</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-              <p className="text-muted-foreground">Diagramm wird geladen...</p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={registrationsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={PRIMARY} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={PRIMARY} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 90%)" />
+                  <XAxis dataKey="monat" tick={{ fontSize: 12, fill: "hsl(220 9% 46%)" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "hsl(220 9% 46%)" }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: "1px solid hsl(220 14% 90%)", fontSize: 13 }}
+                    labelStyle={{ color: "hsl(222 47% 11%)" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="nutzer"
+                    name="Neue Nutzer"
+                    stroke={PRIMARY}
+                    strokeWidth={2}
+                    fill="url(#userGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
@@ -107,8 +166,21 @@ const AdminAnalytics = () => {
             <CardDescription>Listings und Transaktionen</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-              <p className="text-muted-foreground">Diagramm wird geladen...</p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={activityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 90%)" />
+                  <XAxis dataKey="monat" tick={{ fontSize: 12, fill: "hsl(220 9% 46%)" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "hsl(220 9% 46%)" }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: "1px solid hsl(220 14% 90%)", fontSize: 13 }}
+                    labelStyle={{ color: "hsl(222 47% 11%)" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="listings" name="Listings" fill={PRIMARY} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="transaktionen" name="Transaktionen" fill={GOLD} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
@@ -166,7 +238,7 @@ const AdminAnalytics = () => {
                 <span className="font-medium">89</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-accent-foreground">In Prüfung</span>
+                <span className="text-amber-600">In Prüfung</span>
                 <span className="font-medium">23</span>
               </div>
               <div className="flex items-center justify-between">

@@ -317,7 +317,7 @@ const FinancingAdmin = () => {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-accent-foreground">{stats.submitted}</div>
+              <div className="text-2xl font-bold text-amber-600">{stats.submitted}</div>
               <p className="text-sm text-muted-foreground">Neu eingereicht</p>
             </CardContent>
           </Card>

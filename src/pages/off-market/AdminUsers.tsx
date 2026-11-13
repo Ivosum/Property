@@ -57,7 +57,7 @@ const AdminUsers = () => {
       case "verified":
         return <span className="flex items-center gap-1 text-primary"><CheckCircle className="w-4 h-4" /> Verifiziert</span>;
       case "submitted":
-        return <span className="flex items-center gap-1 text-accent-foreground"><Clock className="w-4 h-4" /> In Prüfung</span>;
+        return <span className="flex items-center gap-1 text-amber-600"><Clock className="w-4 h-4" /> In Prüfung</span>;
       case "rejected":
         return <span className="flex items-center gap-1 text-destructive"><XCircle className="w-4 h-4" /> Abgelehnt</span>;
       default:
