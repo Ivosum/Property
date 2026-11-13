@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fillMietvertrag as generateMietvertrag } from "@/lib/fillMietvertrag";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,50 +32,30 @@ const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateStri
 
 const Contracts = () => {
   const [fillingId, setFillingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Ruft die Edge Function auf, die das offizielle Mietvertrags-PDF
-  // automatisch mit den Vertragsdaten füllt, und lädt es herunter.
-  const fillMietvertrag = async (contractId: string, tenant: string) => {
+  // Füllt das offizielle Mietvertrags-PDF clientseitig mit den Vertragsdaten,
+  // legt es dauerhaft ab (Dokumente + Mieterportal) und lädt es herunter.
+  const fillMietvertrag = async (contractId: string) => {
     setFillingId(contractId);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) {
-        toast.error("Bitte erneut anmelden.");
-        return;
-      }
+      const { blob, fileName, stored } = await generateMietvertrag(contractId);
 
-      // Direkter Aufruf der Edge Function, damit das PDF binär (Blob) ankommt
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const resp = await fetch(`${baseUrl}/functions/v1/fill-mietvertrag`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ contract_id: contractId }),
-      });
-
-      if (!resp.ok) {
-        // Fehler kommen als JSON zurück
-        let msg = `Fehler ${resp.status}`;
-        try {
-          const err = await resp.json();
-          if (err?.error) msg = err.error;
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-
-      const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Mietvertrag_${tenant.replace(/[^a-zA-Z0-9]+/g, "_") || "Vertrag"}.pdf`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success("Mietvertrag erstellt");
+
+      if (stored) {
+        toast.success("Mietvertrag erstellt und abgelegt");
+        queryClient.invalidateQueries({ queryKey: ["pm-documents"] });
+      } else {
+        toast.success("Mietvertrag erstellt (nur Download)");
+      }
     } catch (e) {
       toast.error(
         "Mietvertrag konnte nicht erstellt werden. " +
@@ -179,7 +160,7 @@ const Contracts = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => fillMietvertrag(contract.id, contract.tenant)}
+                            onClick={() => fillMietvertrag(contract.id)}
                             disabled={fillingId === contract.id}
                           >
                             {fillingId === contract.id ? (
