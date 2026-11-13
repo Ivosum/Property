@@ -61,7 +61,7 @@ export async function fillMietvertrag(contractId: string): Promise<FillResult> {
   if (!resp.ok) throw new Error("Vorlage konnte nicht geladen werden");
   const tplBytes = new Uint8Array(await resp.arrayBuffer());
 
-  const pdfDoc = await PDFDocument.load(tplBytes);
+  const pdfDoc = await PDFDocument.load(tplBytes, { ignoreEncryption: true });
   const form = pdfDoc.getForm();
 
   const set = (key: keyof typeof FIELDS, value: string) => {
