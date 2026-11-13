@@ -644,6 +644,177 @@ export type Database = {
           },
         ]
       }
+      pm_handover_protocols: {
+        Row: {
+          id: string
+          unit_id: string
+          tenant_id: string | null
+          contract_id: string | null
+          type: Database["public"]["Enums"]["handover_type"]
+          status: Database["public"]["Enums"]["handover_status"]
+          handover_date: string
+          present_persons: string | null
+          meter_electricity: string | null
+          meter_water: string | null
+          meter_gas: string | null
+          keys_count: number | null
+          notes: string | null
+          tenant_signature: string | null
+          landlord_signature: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          unit_id: string
+          tenant_id?: string | null
+          contract_id?: string | null
+          type?: Database["public"]["Enums"]["handover_type"]
+          status?: Database["public"]["Enums"]["handover_status"]
+          handover_date?: string
+          present_persons?: string | null
+          meter_electricity?: string | null
+          meter_water?: string | null
+          meter_gas?: string | null
+          keys_count?: number | null
+          notes?: string | null
+          tenant_signature?: string | null
+          landlord_signature?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          unit_id?: string
+          tenant_id?: string | null
+          contract_id?: string | null
+          type?: Database["public"]["Enums"]["handover_type"]
+          status?: Database["public"]["Enums"]["handover_status"]
+          handover_date?: string
+          present_persons?: string | null
+          meter_electricity?: string | null
+          meter_water?: string | null
+          meter_gas?: string | null
+          keys_count?: number | null
+          notes?: string | null
+          tenant_signature?: string | null
+          landlord_signature?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_handover_protocols_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "pm_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_handover_protocols_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "pm_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_handover_protocols_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "pm_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_handover_items: {
+        Row: {
+          id: string
+          protocol_id: string
+          room: string
+          element: string
+          condition: Database["public"]["Enums"]["handover_condition"]
+          description: string | null
+          cost_bearer: string | null
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          protocol_id: string
+          room: string
+          element: string
+          condition?: Database["public"]["Enums"]["handover_condition"]
+          description?: string | null
+          cost_bearer?: string | null
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          protocol_id?: string
+          room?: string
+          element?: string
+          condition?: Database["public"]["Enums"]["handover_condition"]
+          description?: string | null
+          cost_bearer?: string | null
+          sort_order?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_handover_items_protocol_id_fkey"
+            columns: ["protocol_id"]
+            isOneToOne: false
+            referencedRelation: "pm_handover_protocols"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_handover_photos: {
+        Row: {
+          id: string
+          protocol_id: string
+          item_id: string | null
+          storage_path: string
+          caption: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          protocol_id: string
+          item_id?: string | null
+          storage_path: string
+          caption?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          protocol_id?: string
+          item_id?: string | null
+          storage_path?: string
+          caption?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_handover_photos_protocol_id_fkey"
+            columns: ["protocol_id"]
+            isOneToOne: false
+            referencedRelation: "pm_handover_protocols"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_handover_photos_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "pm_handover_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pm_listing_applications: {
         Row: {
           applicant_email: string
@@ -1467,6 +1638,9 @@ export type Database = {
       contract_status: "draft" | "active" | "terminated" | "expired"
       defect_priority: "low" | "normal" | "urgent"
       defect_status: "open" | "in_progress" | "resolved" | "closed"
+      handover_condition: "good" | "minor_defect" | "defect" | "missing"
+      handover_status: "draft" | "completed" | "signed"
+      handover_type: "move_in" | "move_out"
       document_type:
         | "kyc_id"
         | "kyc_proof_of_address"
@@ -1626,6 +1800,9 @@ export const Constants = {
       contract_status: ["draft", "active", "terminated", "expired"],
       defect_priority: ["low", "normal", "urgent"],
       defect_status: ["open", "in_progress", "resolved", "closed"],
+      handover_condition: ["good", "minor_defect", "defect", "missing"],
+      handover_status: ["draft", "completed", "signed"],
+      handover_type: ["move_in", "move_out"],
       document_type: [
         "kyc_id",
         "kyc_proof_of_address",

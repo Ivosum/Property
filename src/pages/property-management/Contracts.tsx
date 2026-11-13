@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Download, Eye, Loader2 } from "lucide-react";
+import { Plus, FileText, Download, Eye, Loader2, FileSignature } from "lucide-react";
+import { toast } from "sonner";
 
 interface ContractRow {
   id: string;
@@ -28,6 +30,61 @@ const formatCHF = (n: number) =>
 const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("de-CH") : "Unbefristet");
 
 const Contracts = () => {
+  const [fillingId, setFillingId] = useState<string | null>(null);
+
+  // Ruft die Edge Function auf, die das offizielle Mietvertrags-PDF
+  // automatisch mit den Vertragsdaten füllt, und lädt es herunter.
+  const fillMietvertrag = async (contractId: string, tenant: string) => {
+    setFillingId(contractId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        toast.error("Bitte erneut anmelden.");
+        return;
+      }
+
+      // Direkter Aufruf der Edge Function, damit das PDF binär (Blob) ankommt
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const resp = await fetch(`${baseUrl}/functions/v1/fill-mietvertrag`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ contract_id: contractId }),
+      });
+
+      if (!resp.ok) {
+        // Fehler kommen als JSON zurück
+        let msg = `Fehler ${resp.status}`;
+        try {
+          const err = await resp.json();
+          if (err?.error) msg = err.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Mietvertrag_${tenant.replace(/[^a-zA-Z0-9]+/g, "_") || "Vertrag"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Mietvertrag erstellt");
+    } catch (e) {
+      toast.error(
+        "Mietvertrag konnte nicht erstellt werden. " +
+          (e instanceof Error ? e.message : "")
+      );
+    } finally {
+      setFillingId(null);
+    }
+  };
+
   const { data: contracts, isLoading } = useQuery({
     queryKey: ["pm-contracts"],
     queryFn: async () => {
@@ -118,8 +175,21 @@ const Contracts = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex justify-end gap-2">
-                          {contract.documentUrl ? (
+                        <div className="flex justify-end gap-2 items-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fillMietvertrag(contract.id, contract.tenant)}
+                            disabled={fillingId === contract.id}
+                          >
+                            {fillingId === contract.id ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <FileSignature className="w-4 h-4 mr-1" />
+                            )}
+                            Mietvertrag
+                          </Button>
+                          {contract.documentUrl && (
                             <>
                               <Button variant="ghost" size="icon" asChild>
                                 <a href={contract.documentUrl} target="_blank" rel="noopener noreferrer"><Eye className="w-4 h-4" /></a>
@@ -128,8 +198,6 @@ const Contracts = () => {
                                 <a href={contract.documentUrl} download><Download className="w-4 h-4" /></a>
                               </Button>
                             </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Kein Dokument</span>
                           )}
                         </div>
                       </td>

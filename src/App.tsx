@@ -41,6 +41,8 @@ import PMUtilityBilling from "./pages/property-management/UtilityBilling";
 import PMMessages from "./pages/property-management/Messages";
 import PMListings from "./pages/property-management/Listings";
 import PMReports from "./pages/property-management/Reports";
+import PMHandover from "./pages/property-management/Handover";
+import PMHandoverEditor from "./pages/property-management/HandoverEditor";
 import PMSettings from "./pages/property-management/Settings";
 import TenantPortal from "./pages/property-management/TenantPortal";
 
@@ -85,6 +87,8 @@ const App = () => (
             <Route path="/property-management/contracts" element={<PMContracts />} />
             <Route path="/property-management/finances" element={<PMFinances />} />
             <Route path="/property-management/defects" element={<PMDefects />} />
+            <Route path="/property-management/handover" element={<PMHandover />} />
+            <Route path="/property-management/handover/:id" element={<PMHandoverEditor />} />
             <Route path="/property-management/documents" element={<PMDocuments />} />
             <Route path="/property-management/utility-billing" element={<PMUtilityBilling />} />
             <Route path="/property-management/messages" element={<PMMessages />} />

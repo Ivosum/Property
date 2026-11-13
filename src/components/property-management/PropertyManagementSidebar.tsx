@@ -15,6 +15,7 @@ import {
   BarChart3,
   Mail,
   Key,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: "Mietverträge", href: "/property-management/contracts", icon: <ClipboardList className="w-5 h-5" /> },
   { label: "Finanzen", href: "/property-management/finances", icon: <CreditCard className="w-5 h-5" /> },
   { label: "Mängelmeldungen", href: "/property-management/defects", icon: <AlertTriangle className="w-5 h-5" /> },
+  { label: "Wohnungsabnahme", href: "/property-management/handover", icon: <ClipboardCheck className="w-5 h-5" /> },
   { label: "Dokumente", href: "/property-management/documents", icon: <FileText className="w-5 h-5" /> },
   { label: "Nebenkostenabr.", href: "/property-management/utility-billing", icon: <Calendar className="w-5 h-5" /> },
   { label: "Kommunikation", href: "/property-management/messages", icon: <Mail className="w-5 h-5" /> },
