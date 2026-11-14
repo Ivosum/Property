@@ -1,9 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Building2, MapPin, Users, Loader2 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Building2, MapPin, Users, Loader2, Upload, Download, FileSpreadsheet, ChevronDown, Home } from "lucide-react";
+import PropertyDialog from "@/components/property-management/PropertyDialog";
+import UnitDialog from "@/components/property-management/UnitDialog";
+import ImportDialog from "@/components/property-management/ImportDialog";
+import { insertProperties, type PropertyInput } from "@/lib/pmData";
+import { downloadTemplate } from "@/lib/importMapping";
 
 interface PmProperty {
   id: string;
@@ -15,6 +24,11 @@ interface PmProperty {
 }
 
 const Properties = () => {
+  const queryClient = useQueryClient();
+  const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [unitFor, setUnitFor] = useState<string | null>(null);
+
   const { data: properties, isLoading } = useQuery({
     queryKey: ["pm-properties"],
     queryFn: async () => {
@@ -47,19 +61,38 @@ const Properties = () => {
     },
   });
 
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["pm-properties"] });
+
   const list = properties ?? [];
 
   return (
     <PropertyManagementLayout>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold">Liegenschaften</h1>
           <p className="text-muted-foreground mt-1">Verwalten Sie Ihr Immobilienportfolio</p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Liegenschaft hinzufügen
-        </Button>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Import / Vorlage <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" /> Excel/CSV importieren
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => downloadTemplate("properties")}>
+                <Download className="w-4 h-4 mr-2" /> Vorlage herunterladen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Liegenschaft hinzufügen
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -74,13 +107,21 @@ const Properties = () => {
           </div>
           <h3 className="font-display text-lg font-semibold">Noch keine Liegenschaften</h3>
           <p className="text-muted-foreground mt-1 max-w-md">
-            Fügen Sie Ihre erste Liegenschaft hinzu, um loszulegen.
+            Fügen Sie Ihre erste Liegenschaft hinzu oder importieren Sie eine Excel-Liste.
           </p>
+          <div className="flex gap-2 mt-5">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" /> Excel importieren
+            </Button>
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Liegenschaft hinzufügen
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {list.map((property) => (
-            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+            <Card key={property.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -107,11 +148,31 @@ const Properties = () => {
                     />
                   </div>
                 </div>
+                <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => setUnitFor(property.id)}>
+                  <Home className="w-4 h-4 mr-2" /> Einheit hinzufügen
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <PropertyDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refresh} />
+      {unitFor && (
+        <UnitDialog
+          open={!!unitFor}
+          onOpenChange={(o) => { if (!o) setUnitFor(null); }}
+          propertyId={unitFor}
+          onSaved={refresh}
+        />
+      )}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        schema="properties"
+        onImport={(rows) => insertProperties(rows as unknown as PropertyInput[])}
+        onDone={refresh}
+      />
     </PropertyManagementLayout>
   );
 };

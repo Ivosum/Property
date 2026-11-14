@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, FileText, Download, Eye, Loader2, FileSignature } from "lucide-react";
 import { toast } from "sonner";
+import ContractDialog from "@/components/property-management/ContractDialog";
 
 interface ContractRow {
   id: string;
@@ -32,7 +33,13 @@ const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateStri
 
 const Contracts = () => {
   const [fillingId, setFillingId] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const queryClient = useQueryClient();
+  const refreshContracts = () => {
+    queryClient.invalidateQueries({ queryKey: ["pm-contracts"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-properties"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
+  };
 
   // Füllt das offizielle Mietvertrags-PDF clientseitig mit den Vertragsdaten,
   // legt es dauerhaft ab (Dokumente + Mieterportal) und lädt es herunter.
@@ -98,7 +105,7 @@ const Contracts = () => {
           <h1 className="font-display text-3xl font-bold">Mietverträge</h1>
           <p className="text-muted-foreground mt-1">Verwalten und erstellen Sie Mietverträge</p>
         </div>
-        <Button>
+        <Button onClick={() => setAddOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Vertrag erstellen
         </Button>
@@ -190,6 +197,8 @@ const Contracts = () => {
           )}
         </CardContent>
       </Card>
+
+      <ContractDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refreshContracts} />
     </PropertyManagementLayout>
   );
 };

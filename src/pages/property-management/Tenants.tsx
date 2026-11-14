@@ -1,11 +1,18 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Phone, Building2, Loader2, Users } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Search, Mail, Phone, Building2, Loader2, Users, Upload, Download, FileSpreadsheet, ChevronDown } from "lucide-react";
+import TenantDialog from "@/components/property-management/TenantDialog";
+import ImportDialog from "@/components/property-management/ImportDialog";
+import { insertTenants, type TenantInput } from "@/lib/pmData";
+import { downloadTemplate } from "@/lib/importMapping";
 
 interface TenantRow {
   id: string;
@@ -22,6 +29,10 @@ const formatCHF = (n: number) =>
 
 const Tenants = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
 
   const { data: tenants, isLoading } = useQuery({
     queryKey: ["pm-tenants"],
@@ -69,10 +80,28 @@ const Tenants = () => {
           <h1 className="font-display text-3xl font-bold">Mieter</h1>
           <p className="text-muted-foreground mt-1">Übersicht aller Mietverhältnisse</p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Mieter hinzufügen
-        </Button>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Import / Vorlage <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" /> Excel/CSV importieren
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => downloadTemplate("tenants")}>
+                <Download className="w-4 h-4 mr-2" /> Vorlage herunterladen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Mieter hinzufügen
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -157,6 +186,15 @@ const Tenants = () => {
           )}
         </CardContent>
       </Card>
+
+      <TenantDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refresh} />
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        schema="tenants"
+        onImport={(rows) => insertTenants(rows as unknown as TenantInput[])}
+        onDone={refresh}
+      />
     </PropertyManagementLayout>
   );
 };
