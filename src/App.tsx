@@ -32,6 +32,7 @@ import FinancingAdmin from "./pages/off-market/FinancingAdmin";
 // Property Management Routes
 import PMDashboard from "./pages/property-management/Dashboard";
 import PMProperties from "./pages/property-management/Properties";
+import PMPropertyDetail from "./pages/property-management/PropertyDetail";
 import PMTenants from "./pages/property-management/Tenants";
 import PMContracts from "./pages/property-management/Contracts";
 import PMFinances from "./pages/property-management/Finances";
@@ -86,6 +87,7 @@ const App = () => (
             {/* Property Management Routes */}
             <Route path="/property-management" element={<PMDashboard />} />
             <Route path="/property-management/properties" element={<PMProperties />} />
+            <Route path="/property-management/properties/:propertyId" element={<PMPropertyDetail />} />
             <Route path="/property-management/tenants" element={<PMTenants />} />
             <Route path="/property-management/contracts" element={<PMContracts />} />
             <Route path="/property-management/finances" element={<PMFinances />} />

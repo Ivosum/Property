@@ -268,8 +268,10 @@ function CreateBillingDialog({
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-muted-foreground text-xs">
-                          <th className="text-left py-2 px-3">Mieter</th>
+                          <th className="text-left py-2 px-3">Mieter / Objekt</th>
+                          <th className="text-left py-2 px-3">Zeitraum</th>
                           <th className="text-right py-2 px-3">m²</th>
+                          <th className="text-right py-2 px-3">Tage</th>
                           <th className="text-right py-2 px-3">Anteil</th>
                           <th className="text-right py-2 px-3">Kosten</th>
                           <th className="text-right py-2 px-3">Akonto</th>
@@ -280,7 +282,9 @@ function CreateBillingDialog({
                         {preview.tenants.map((t) => (
                           <tr key={t.contract_id} className="border-b">
                             <td className="py-2 px-3">{t.tenant_name}<span className="text-muted-foreground"> · {t.unit_number}</span></td>
+                            <td className="py-2 px-3 text-muted-foreground text-xs whitespace-nowrap">{t.period_label}</td>
                             <td className="py-2 px-3 text-right">{t.area_sqm}</td>
+                            <td className="py-2 px-3 text-right">{t.days}</td>
                             <td className="py-2 px-3 text-right">{(t.share_pct * 100).toFixed(1)}%</td>
                             <td className="py-2 px-3 text-right">{formatCHF(t.cost_share)}</td>
                             <td className="py-2 px-3 text-right">{formatCHF(t.advance_paid)}</td>
@@ -289,6 +293,18 @@ function CreateBillingDialog({
                             </td>
                           </tr>
                         ))}
+                        {preview.vacancyCost > 0.5 && (
+                          <tr className="border-b bg-secondary/30">
+                            <td className="py-2 px-3 font-medium">Leerstand (Eigentümer)</td>
+                            <td className="py-2 px-3 text-muted-foreground text-xs">nicht vermietete Zeit</td>
+                            <td className="py-2 px-3 text-right">–</td>
+                            <td className="py-2 px-3 text-right">–</td>
+                            <td className="py-2 px-3 text-right">{preview.totalCost > 0 ? ((preview.vacancyCost / preview.totalCost) * 100).toFixed(1) : "0"}%</td>
+                            <td className="py-2 px-3 text-right">{formatCHF(preview.vacancyCost)}</td>
+                            <td className="py-2 px-3 text-right">–</td>
+                            <td className="py-2 px-3 text-right">–</td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>

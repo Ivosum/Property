@@ -1,8 +1,13 @@
-// Nebenkosten-Abrechnungslogik: zieht die Nebenkosten aus der Buchhaltung,
-// verteilt sie nach Wohnfläche (m²) auf die Mieter und verrechnet die Akonto-Zahlungen.
+// Nebenkosten-Abrechnungslogik (taggenau).
+// Zieht die Nebenkosten aus der Buchhaltung und verteilt sie nach
+// Wohnfläche (m²) × belegten Tagen auf jeden Mieter, der die Einheit
+// im Abrechnungszeitraum bewohnt hat. Mieterwechsel werden pro Periode
+// einzeln abgerechnet; Leerstandstage tragen den Eigentümer.
+// Nur Wohnungen/Gewerbe tragen Nebenkosten (Keller/Parkplätze nicht).
 
 import { supabase } from "@/integrations/supabase/client";
-import { getAccounts, getJournal, computeBalances, type Account } from "./accounting";
+import { getAccounts, getJournal, computeBalances } from "./accounting";
+import { NK_RELEVANT_TYPES } from "./pmData";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any;
@@ -15,7 +20,7 @@ export interface CostLine {
   code: string;
   name: string;
   amount: number;
-  included: boolean; // ob in dieser Abrechnung berücksichtigt
+  included: boolean;
   isDefault: boolean;
 }
 
@@ -26,53 +31,54 @@ export interface TenantShare {
   tenant_name: string;
   unit_number: string;
   area_sqm: number;
-  share_pct: number;      // Anteil an der Gesamtfläche
-  months: number;          // Monate der Periode mit aktivem Vertrag
-  cost_share: number;      // zugeteilte Nebenkosten
-  advance_paid: number;    // geleistete Akonto (utilities_advance * months)
-  balance: number;         // advance_paid - cost_share  (positiv = Guthaben, negativ = Nachzahlung)
+  days: number;           // belegte Tage im Zeitraum
+  period_label: string;   // z.B. "01.01.2025 – 31.07.2025"
+  share_pct: number;      // Anteil an der Gesamt-Gewichtung (Fläche×Tage)
+  cost_share: number;     // zugeteilte Nebenkosten
+  advance_paid: number;   // Akonto (monatliches Akonto × belegte Monate, taggenau)
+  balance: number;        // advance_paid - cost_share
 }
 
 export interface BillingPreview {
   availableCosts: CostLine[];
   totalCost: number;
-  totalArea: number;
+  totalArea: number;        // Fläche der NK-relevanten Einheiten
+  periodDays: number;
+  vacancyCost: number;      // Leerstandsanteil (zu Lasten Eigentümer)
   tenants: TenantShare[];
 }
 
-const monthsBetween = (startISO: string, endISO: string) => {
-  const s = new Date(startISO);
-  const e = new Date(endISO);
-  const m = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
-  return Math.max(0, m);
-};
+const MS_DAY = 86400000;
+const toDate = (iso: string) => new Date(iso + (iso.length <= 10 ? "T00:00:00" : ""));
+const fmt = (d: Date) => d.toLocaleDateString("de-CH");
 
-// Überlappung zwischen Mietdauer und Abrechnungsperiode in Monaten
-const overlapMonths = (
-  periodStart: string, periodEnd: string,
-  contractStart: string | null, contractEnd: string | null
-) => {
-  const ps = new Date(periodStart).getTime();
-  const pe = new Date(periodEnd).getTime();
-  const cs = contractStart ? new Date(contractStart).getTime() : ps;
-  const ce = contractEnd ? new Date(contractEnd).getTime() : pe;
-  const start = Math.max(ps, cs);
-  const end = Math.min(pe, ce);
-  if (end < start) return 0;
-  return monthsBetween(new Date(start).toISOString().slice(0, 10), new Date(end).toISOString().slice(0, 10));
-};
+// Anzahl Tage im Überlappungsintervall [max(starts), min(ends)] inkl. Endtag
+function overlapDays(
+  pStart: Date, pEnd: Date,
+  cStart: Date, cEnd: Date,
+): { days: number; from: Date; to: Date } {
+  const from = new Date(Math.max(pStart.getTime(), cStart.getTime()));
+  const to = new Date(Math.min(pEnd.getTime(), cEnd.getTime()));
+  if (to.getTime() < from.getTime()) return { days: 0, from, to };
+  const days = Math.round((to.getTime() - from.getTime()) / MS_DAY) + 1; // inkl. Endtag
+  return { days, from, to };
+}
 
 export async function buildBillingPreview(params: {
   propertyId: string;
   periodStart: string; // ISO
   periodEnd: string;   // ISO
-  includedAccountIds?: string[]; // überschreibt die Standardauswahl
+  includedAccountIds?: string[];
   distribution?: "area" | "per_unit";
 }): Promise<BillingPreview> {
   const { propertyId, periodStart, periodEnd } = params;
   const distribution = params.distribution ?? "area";
 
-  // 1) Kostenkonten + Saldi im Zeitraum aus der Buchhaltung
+  const pStart = toDate(periodStart);
+  const pEnd = toDate(periodEnd);
+  const periodDays = Math.max(1, Math.round((pEnd.getTime() - pStart.getTime()) / MS_DAY) + 1);
+
+  // 1) Kostenkonten + Saldi im Zeitraum
   const [accounts, entries] = await Promise.all([
     getAccounts(propertyId),
     getJournal(propertyId, { from: periodStart, to: periodEnd }),
@@ -85,77 +91,82 @@ export async function buildBillingPreview(params: {
     const included = params.includedAccountIds
       ? params.includedAccountIds.includes(b.account.id)
       : isDefault;
-    return {
-      account_id: b.account.id,
-      code: b.account.code,
-      name: b.account.name,
-      amount: b.balance,
-      included,
-      isDefault,
-    };
+    return { account_id: b.account.id, code: b.account.code, name: b.account.name, amount: b.balance, included, isDefault };
   });
-
   const totalCost = availableCosts.filter((c) => c.included).reduce((s, c) => s + c.amount, 0);
 
-  // 2) Mieter mit aktivem/überlappendem Vertrag + Wohnfläche
-  const [{ data: contracts }, { data: units }, { data: tenants }] = await Promise.all([
+  // 2) Einheiten + Verträge
+  const [{ data: units }, { data: contracts }, { data: tenants }] = await Promise.all([
+    sb.from("pm_units").select("id, unit_number, floor_label, property_id, living_area_sqm, utilities_advance, unit_type"),
     sb.from("pm_contracts").select("id, tenant_id, unit_id, start_date, end_date, status, utilities_advance"),
-    sb.from("pm_units").select("id, unit_number, property_id, living_area_sqm, utilities_advance"),
     sb.from("pm_tenants").select("id, first_name, last_name"),
   ]);
 
   const unitById = new Map<string, any>((units ?? []).map((u: any) => [u.id, u]));
   const tenantById = new Map<string, any>((tenants ?? []).map((t: any) => [t.id, t]));
 
-  // nur Verträge dieser Liegenschaft mit Überlappung
-  const relevant = (contracts ?? []).filter((c: any) => {
+  // NK-relevante Einheiten dieser Liegenschaft (Wohnung/Gewerbe)
+  const nkUnits = (units ?? []).filter(
+    (u: any) => u.property_id === propertyId && NK_RELEVANT_TYPES.includes(u.unit_type ?? "wohnung"),
+  );
+  const totalArea = nkUnits.reduce((s: number, u: any) => s + (Number(u.living_area_sqm) || 0), 0);
+
+  // Gesamt-Gewichtung über die VOLLE Periode (Fläche × alle Tage) – so bleibt
+  // der Leerstandsanteil automatisch beim Eigentümer.
+  let totalWeight = 0;
+  if (distribution === "area") {
+    totalWeight = nkUnits.reduce((s: number, u: any) => s + (Number(u.living_area_sqm) || 0) * periodDays, 0);
+  } else {
+    totalWeight = nkUnits.length * periodDays; // je Einheit gleich gewichtet
+  }
+
+  // 3) Mieter-Slices (nur auf NK-relevanten Einheiten, mit Überlappung)
+  const nkUnitIds = new Set(nkUnits.map((u: any) => u.id));
+  const tenantShares: TenantShare[] = [];
+
+  for (const c of (contracts ?? [])) {
+    if (!nkUnitIds.has(c.unit_id)) continue;            // Keller/Parking tragen keine NK
+    if (c.status !== "active" && c.status !== "terminated" && c.status !== "expired") continue;
     const u = unitById.get(c.unit_id);
-    if (!u || u.property_id !== propertyId) return false;
-    return overlapMonths(periodStart, periodEnd, c.start_date, c.end_date) > 0;
-  });
+    if (!u) continue;
 
-  // Gesamtfläche aller abgerechneten Einheiten
-  const totalArea = relevant.reduce((s: number, c: any) => {
-    const u = unitById.get(c.unit_id);
-    return s + (Number(u?.living_area_sqm) || 0);
-  }, 0);
+    const cStart = toDate(c.start_date);
+    const cEnd = c.end_date ? toDate(c.end_date) : pEnd;
+    const { days, from, to } = overlapDays(pStart, pEnd, cStart, cEnd);
+    if (days <= 0) continue;
 
-  const count = relevant.length;
-
-  const tenantShares: TenantShare[] = relevant.map((c: any) => {
-    const u = unitById.get(c.unit_id);
-    const t = tenantById.get(c.tenant_id);
-    const area = Number(u?.living_area_sqm) || 0;
-    const months = overlapMonths(periodStart, periodEnd, c.start_date, c.end_date);
-
-    let share_pct = 0;
-    if (distribution === "area") {
-      share_pct = totalArea > 0 ? area / totalArea : 0;
-    } else {
-      share_pct = count > 0 ? 1 / count : 0;
-    }
+    const area = Number(u.living_area_sqm) || 0;
+    const weight = distribution === "area" ? area * days : (days / periodDays);
+    const share_pct = totalWeight > 0 ? weight / totalWeight : 0;
     const cost_share = totalCost * share_pct;
 
-    const advanceMonthly = Number(c.utilities_advance) || Number(u?.utilities_advance) || 0;
-    const advance_paid = advanceMonthly * months;
-    const balance = advance_paid - cost_share;
+    const advanceMonthly = Number(c.utilities_advance) || Number(u.utilities_advance) || 0;
+    const advance_paid = advanceMonthly * (days / (365 / 12)); // taggenau auf Monatsbasis
+    const t = tenantById.get(c.tenant_id);
 
-    return {
+    tenantShares.push({
       contract_id: c.id,
       tenant_id: c.tenant_id,
       unit_id: c.unit_id,
       tenant_name: [t?.first_name, t?.last_name].filter(Boolean).join(" ") || "Unbenannt",
-      unit_number: u?.unit_number ?? "–",
+      unit_number: [u.floor_label, u.unit_number].filter(Boolean).join(" ") || u.unit_number,
       area_sqm: area,
+      days,
+      period_label: `${fmt(from)} – ${fmt(to)}`,
       share_pct,
-      months,
       cost_share,
       advance_paid,
-      balance,
-    };
-  });
+      balance: advance_paid - cost_share,
+    });
+  }
 
-  return { availableCosts, totalCost, totalArea, tenants: tenantShares };
+  // nach Einheit, dann Startdatum sortieren
+  tenantShares.sort((a, b) => a.unit_number.localeCompare(b.unit_number, "de") || a.period_label.localeCompare(b.period_label));
+
+  const allocated = tenantShares.reduce((s, t) => s + t.cost_share, 0);
+  const vacancyCost = Math.max(0, totalCost - allocated);
+
+  return { availableCosts, totalCost, totalArea, periodDays, vacancyCost, tenants: tenantShares };
 }
 
 // Abrechnung speichern (pm_utility_bills + items)
@@ -199,7 +210,7 @@ export async function saveBilling(params: {
     balance: Number(t.balance.toFixed(2)),
     area_sqm: t.area_sqm,
     share_pct: Number((t.share_pct * 100).toFixed(3)),
-    months: t.months,
+    months: Math.round((t.days / (365 / 12)) * 10) / 10,
   }));
   const { error: iErr } = await sb.from("pm_utility_bill_items").insert(items);
   if (iErr) {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
@@ -9,7 +10,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, Building2, MapPin, Users, Loader2, Upload, Download, FileSpreadsheet, ChevronDown, Home } from "lucide-react";
 import PropertyDialog from "@/components/property-management/PropertyDialog";
-import UnitDialog from "@/components/property-management/UnitDialog";
 import ImportDialog from "@/components/property-management/ImportDialog";
 import { insertProperties, type PropertyInput } from "@/lib/pmData";
 import { downloadTemplate } from "@/lib/importMapping";
@@ -25,9 +25,9 @@ interface PmProperty {
 
 const Properties = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [unitFor, setUnitFor] = useState<string | null>(null);
 
   const { data: properties, isLoading } = useQuery({
     queryKey: ["pm-properties"],
@@ -121,7 +121,8 @@ const Properties = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {list.map((property) => (
-            <Card key={property.id} className="hover:shadow-lg transition-shadow">
+            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => navigate(`/property-management/properties/${property.id}`)}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -148,8 +149,9 @@ const Properties = () => {
                     />
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => setUnitFor(property.id)}>
-                  <Home className="w-4 h-4 mr-2" /> Einheit hinzufügen
+                <Button variant="outline" size="sm" className="w-full mt-4"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/property-management/properties/${property.id}`); }}>
+                  <Home className="w-4 h-4 mr-2" /> Einheiten verwalten
                 </Button>
               </CardContent>
             </Card>
@@ -158,14 +160,6 @@ const Properties = () => {
       )}
 
       <PropertyDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refresh} />
-      {unitFor && (
-        <UnitDialog
-          open={!!unitFor}
-          onOpenChange={(o) => { if (!o) setUnitFor(null); }}
-          propertyId={unitFor}
-          onSaved={refresh}
-        />
-      )}
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
