@@ -32,7 +32,7 @@ const Hero = () => {
       <div className="absolute bottom-1/4 left-10 w-96 h-96 bg-gold/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
 
       {/* Content */}
-      <div className="relative z-10 container mx-auto px-4 lg:px-8 text-center">
+      <div className="relative z-10 container mx-auto px-4 lg:px-8 text-center pt-24 lg:pt-28">
         <div className="max-w-5xl mx-auto">
           {/* Animated Badge */}
           <div 
