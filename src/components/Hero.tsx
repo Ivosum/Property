@@ -88,36 +88,36 @@ const Hero = () => {
 
           {/* CTA Buttons */}
           <div
-            className="flex flex-col sm:flex-row gap-4 justify-center mb-20 animate-fade-in-up opacity-0"
+            className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up opacity-0"
             style={{ animationDelay: "0.8s" }}
           >
-            <Button 
-              asChild 
-              size="lg" 
+            <Button
+              asChild
+              size="lg"
               className="px-10 py-7 text-lg font-semibold shadow-2xl shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-300 animate-pulse-glow"
             >
               <a href="#platforms">Jetzt starten</a>
             </Button>
-            <Button 
-              asChild 
-              size="lg" 
-              variant="outline" 
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
               className="glass border-white/30 text-foreground hover:bg-white px-10 py-7 text-lg font-semibold hover:scale-105 transition-all duration-300"
             >
               <a href="#features">Mehr erfahren</a>
             </Button>
           </div>
+
+          {/* Scroll Indicator (im Fluss, damit keine Überlappung) */}
+          <a
+            href="#features"
+            className="mt-16 inline-flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
+          >
+            <span className="text-sm font-medium tracking-wider uppercase">Entdecken</span>
+            <ChevronDown className="w-6 h-6 animate-bounce" />
+          </a>
         </div>
       </div>
-
-      {/* Scroll Indicator */}
-      <a
-        href="#features"
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
-      >
-        <span className="text-sm font-medium tracking-wider uppercase">Entdecken</span>
-        <ChevronDown className="w-6 h-6 animate-bounce" />
-      </a>
     </section>
   );
 };
