@@ -290,6 +290,70 @@ export interface ContractObjectLine {
 }
 
 /**
+ * Erzeugt den Mietzins-Soll (monatliche pm_payments, Status "pending") für
+ * einen Vertrag. Bei unbefristeten Verträgen werden `monthsAhead` Monate ab
+ * Mietbeginn vorausgeplant, bei befristeten die tatsächliche Laufzeit
+ * (max. 24 Monate). Betrag = Nettomiete + NK-Akonto (Bruttomietzins).
+ * Idempotenz-Schutz: bestehende Zahlungen des Vertrags werden nicht doppelt
+ * erzeugt (gleiche contract_id + due_date).
+ */
+export async function generateRentPayments(params: {
+  contract_id: string;
+  tenant_id: string;
+  base_rent: number;
+  utilities_advance: number;
+  start_date: string;
+  end_date?: string | null;
+  monthsAhead?: number;
+}): Promise<number> {
+  const gross = (Number(params.base_rent) || 0) + (Number(params.utilities_advance) || 0);
+  if (gross <= 0) return 0;
+
+  const start = new Date(params.start_date + "T00:00:00");
+  const monthsAhead = params.monthsAhead ?? 12;
+  let months: number;
+  if (params.end_date) {
+    const end = new Date(params.end_date + "T00:00:00");
+    months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    months = Math.min(Math.max(months, 1), 24);
+  } else {
+    months = monthsAhead;
+  }
+
+  // bereits vorhandene Fälligkeiten dieses Vertrags (keine Duplikate)
+  const { data: existing } = await sb.from("pm_payments").select("due_date").eq("contract_id", params.contract_id);
+  const have = new Set((existing ?? []).map((p: any) => String(p.due_date)));
+
+  const rows: any[] = [];
+  for (let i = 0; i < months; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const due = d.toISOString().slice(0, 10);
+    if (have.has(due)) continue;
+    rows.push({
+      contract_id: params.contract_id,
+      tenant_id: params.tenant_id,
+      amount: gross,
+      payment_type: "rent",
+      due_date: due,
+      status: "pending",
+    });
+  }
+  if (rows.length === 0) return 0;
+  const { error } = await sb.from("pm_payments").insert(rows);
+  if (error) throw error;
+  return rows.length;
+}
+
+// Zahlung als bezahlt markieren -> DB-Trigger verbucht automatisch
+// (Bank an Mietertrag) in der Buchhaltung der Liegenschaft.
+export async function markPaymentPaid(paymentId: string, paidDate?: string) {
+  const { error } = await sb.from("pm_payments")
+    .update({ status: "paid", paid_date: paidDate ?? new Date().toISOString().slice(0, 10) })
+    .eq("id", paymentId);
+  if (error) throw error;
+}
+
+/**
  * Vertrag über MEHRERE Objekte (z.B. Wohnung + Keller + Parkplatz) für denselben
  * Mieter: erzeugt je Objekt einen pm_contracts-Datensatz mit gemeinsamer
  * contract_number, damit "welche Objekte gehören zu diesem Mieter" vollständig
@@ -324,12 +388,28 @@ export async function insertContractGroup(params: {
     notes: params.notes ?? null,
   }));
 
-  const { data, error } = await sb.from("pm_contracts").insert(rows).select("id");
+  const { data, error } = await sb.from("pm_contracts").insert(rows).select("id, unit_id, base_rent, utilities_advance");
   if (error) throw error;
+
+  const created = (data ?? []) as any[];
 
   if (status === "active") {
     const unitIds = params.objects.map((o) => o.unit_id);
     await sb.from("pm_units").update({ status: "occupied" }).in("id", unitIds);
+
+    // Mietzins-Soll (monatliche Zahlungen) je Objekt generieren
+    for (const c of created) {
+      try {
+        await generateRentPayments({
+          contract_id: c.id,
+          tenant_id: params.tenant_id,
+          base_rent: Number(c.base_rent) || 0,
+          utilities_advance: Number(c.utilities_advance) || 0,
+          start_date: params.start_date,
+          end_date: params.end_date ?? null,
+        });
+      } catch { /* Zahlungsplan ist best-effort, Vertrag bleibt bestehen */ }
+    }
   }
-  return (data ?? []).map((r: any) => r.id as string);
+  return created.map((r) => r.id as string);
 }
