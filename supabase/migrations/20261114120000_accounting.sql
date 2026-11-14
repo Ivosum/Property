@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.pm_journal_entries (
 CREATE TABLE IF NOT EXISTS public.pm_journal_lines (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   entry_id      UUID NOT NULL REFERENCES public.pm_journal_entries(id) ON DELETE CASCADE,
-  account_id    UUID NOT NULL REFERENCES public.pm_accounts(id) ON DELETE RESTRICT,
+  account_id    UUID NOT NULL REFERENCES public.pm_accounts(id) ON DELETE CASCADE,
   debit         NUMERIC(14,2) NOT NULL DEFAULT 0,   -- Soll
   credit        NUMERIC(14,2) NOT NULL DEFAULT 0,   -- Haben
   line_text     TEXT,
