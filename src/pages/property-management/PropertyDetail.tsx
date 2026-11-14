@@ -5,9 +5,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { getUnits, UNIT_TYPE_LABEL, FLOOR_LABELS, type UnitRow } from "@/lib/pmData";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import UnitDialog from "@/components/property-management/UnitDialog";
+import ImportDialog from "@/components/property-management/ImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { insertUnits } from "@/lib/pmData";
+import { downloadTemplate, normalizeUnitType } from "@/lib/importMapping";
+import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown } from "lucide-react";
 
 const sb = supabase as any;
 
@@ -42,6 +48,7 @@ const PropertyDetail = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [unitOpen, setUnitOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: property } = useQuery({
     queryKey: ["pm-property", propertyId],
@@ -98,9 +105,27 @@ const PropertyDetail = () => {
             {unitList.length} Objekte · {flatCount} Wohn-/Gewerbeeinheiten · {occupied} vermietet
           </p>
         </div>
-        <Button onClick={() => setUnitOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Einheit hinzufügen
-        </Button>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Import / Vorlage <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" /> Einheiten aus Excel/CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => downloadTemplate("units")}>
+                <Download className="w-4 h-4 mr-2" /> Vorlage herunterladen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => setUnitOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Einheit hinzufügen
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -166,6 +191,16 @@ const PropertyDetail = () => {
       )}
 
       <UnitDialog open={unitOpen} onOpenChange={setUnitOpen} propertyId={propertyId!} onSaved={refresh} />
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        schema="units"
+        onImport={(rows) => insertUnits(
+          propertyId!,
+          rows.map((r) => ({ ...r, unit_type: normalizeUnitType(r.unit_type) })),
+        )}
+        onDone={refresh}
+      />
     </PropertyManagementLayout>
   );
 };

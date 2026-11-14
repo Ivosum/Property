@@ -132,6 +132,25 @@ export async function insertUnit(u: UnitInput) {
   return data.id as string;
 }
 
+// Mehrere Einheiten einer Liegenschaft importieren (aus Excel/CSV).
+export async function insertUnits(propertyId: string, rows: Array<Record<string, string | number | null>>) {
+  const payload = rows.map((r) => ({
+    property_id: propertyId,
+    unit_number: String(r.unit_number ?? "").trim(),
+    unit_type: typeof r.unit_type === "string" && r.unit_type ? r.unit_type : "wohnung",
+    floor_label: r.floor_label ? String(r.floor_label).trim() : null,
+    rooms: r.rooms != null && r.rooms !== "" ? Number(r.rooms) : null,
+    living_area_sqm: r.living_area_sqm != null && r.living_area_sqm !== "" ? Number(r.living_area_sqm) : null,
+    base_rent: r.base_rent != null && r.base_rent !== "" ? Number(r.base_rent) : 0,
+    utilities_advance: r.utilities_advance != null && r.utilities_advance !== "" ? Number(r.utilities_advance) : 0,
+    status: "vacant",
+    notes: r.notes ? String(r.notes) : null,
+  }));
+  const { data, error } = await sb.from("pm_units").insert(payload).select("id");
+  if (error) throw error;
+  return (data ?? []).length as number;
+}
+
 export interface UnitRow {
   id: string;
   property_id: string;
@@ -242,6 +261,26 @@ export async function insertContract(c: ContractInput) {
     await sb.from("pm_units").update({ status: "occupied" }).eq("id", c.unit_id);
   }
   return data.id as string;
+}
+
+// Vertrag beenden (Mieterwechsel): Enddatum setzen, Status terminiert,
+// Einheit wieder frei – sofern nicht noch ein anderer aktiver Vertrag darauf läuft.
+export async function terminateContract(contractId: string, endDate: string) {
+  const { data: con, error: cErr } = await sb
+    .from("pm_contracts").select("id, unit_id").eq("id", contractId).single();
+  if (cErr) throw cErr;
+
+  const { error } = await sb.from("pm_contracts")
+    .update({ end_date: endDate, status: "terminated", termination_date: endDate })
+    .eq("id", contractId);
+  if (error) throw error;
+
+  // Einheit nur freigeben, wenn kein weiterer aktiver Vertrag darauf besteht
+  const { data: others } = await sb.from("pm_contracts")
+    .select("id").eq("unit_id", con.unit_id).eq("status", "active");
+  if (!others || others.length === 0) {
+    await sb.from("pm_units").update({ status: "vacant" }).eq("id", con.unit_id);
+  }
 }
 
 export interface ContractObjectLine {

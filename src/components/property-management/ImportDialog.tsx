@@ -14,7 +14,7 @@ import {
   type ParsedSheet, type MappedRow,
 } from "@/lib/importMapping";
 
-type Schema = "properties" | "tenants";
+type Schema = "properties" | "tenants" | "units";
 
 interface Props {
   open: boolean;
@@ -67,7 +67,8 @@ const ImportDialog = ({ open, onOpenChange, schema, onImport, onDone }: Props) =
     setImporting(true);
     try {
       const n = await onImport(validRows.map((r) => r.values));
-      toast.success(`${n} ${schema === "properties" ? "Liegenschaften" : "Mieter"} importiert`);
+      const noun = schema === "properties" ? "Liegenschaften" : schema === "tenants" ? "Mieter" : "Einheiten";
+      toast.success(`${n} ${noun} importiert`);
       onDone?.();
       onOpenChange(false);
       reset();
@@ -78,7 +79,8 @@ const ImportDialog = ({ open, onOpenChange, schema, onImport, onDone }: Props) =
     }
   };
 
-  const title = schema === "properties" ? "Liegenschaften importieren" : "Mieter importieren";
+  const title = schema === "properties" ? "Liegenschaften importieren"
+    : schema === "tenants" ? "Mieter importieren" : "Einheiten importieren";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>

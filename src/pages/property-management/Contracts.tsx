@@ -5,9 +5,16 @@ import { fillMietvertrag as generateMietvertrag } from "@/lib/fillMietvertrag";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Download, Eye, Loader2, FileSignature } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, FileText, Download, Eye, Loader2, FileSignature, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import ContractDialog from "@/components/property-management/ContractDialog";
+import { terminateContract } from "@/lib/pmData";
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 interface ContractRow {
   id: string;
@@ -17,6 +24,7 @@ interface ContractRow {
   end: string;
   rent: number;
   status: string;
+  rawStatus: string;
   documentUrl: string | null;
 }
 
@@ -34,11 +42,29 @@ const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateStri
 const Contracts = () => {
   const [fillingId, setFillingId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [terminateId, setTerminateId] = useState<string | null>(null);
+  const [terminating, setTerminating] = useState(false);
   const queryClient = useQueryClient();
   const refreshContracts = () => {
     queryClient.invalidateQueries({ queryKey: ["pm-contracts"] });
     queryClient.invalidateQueries({ queryKey: ["pm-properties"] });
     queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-property-units"] });
+  };
+
+  const doTerminate = async () => {
+    if (!terminateId) return;
+    setTerminating(true);
+    try {
+      await terminateContract(terminateId, todayISO());
+      toast.success("Vertrag beendet – Einheit ist wieder frei");
+      refreshContracts();
+      setTerminateId(null);
+    } catch (e) {
+      toast.error("Konnte nicht beendet werden. " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setTerminating(false);
+    }
   };
 
   // Füllt das offizielle Mietvertrags-PDF clientseitig mit den Vertragsdaten,
@@ -91,6 +117,7 @@ const Contracts = () => {
         end: formatDate(c.end_date),
         rent: c.base_rent,
         status: statusLabels[c.status] ?? c.status,
+        rawStatus: c.status,
         documentUrl: c.document_url,
       })) as ContractRow[];
     },
@@ -177,6 +204,16 @@ const Contracts = () => {
                             )}
                             Mietvertrag
                           </Button>
+                          {contract.rawStatus === "active" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-orange-600 hover:text-orange-700"
+                              onClick={() => setTerminateId(contract.id)}
+                            >
+                              <LogOut className="w-4 h-4 mr-1" /> Beenden
+                            </Button>
+                          )}
                           {contract.documentUrl && (
                             <>
                               <Button variant="ghost" size="icon" asChild>
@@ -199,6 +236,25 @@ const Contracts = () => {
       </Card>
 
       <ContractDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refreshContracts} />
+
+      <AlertDialog open={!!terminateId} onOpenChange={(o) => { if (!o) setTerminateId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Vertrag beenden?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Der Vertrag wird per heute gekündigt und die Einheit wird wieder als frei markiert
+              (sofern kein weiterer aktiver Vertrag darauf läuft). Danach können Sie einen neuen
+              Mieter erfassen. Die bisherige Abrechnung bleibt erhalten.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={terminating}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doTerminate(); }} disabled={terminating}>
+              {terminating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Vertrag beenden
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PropertyManagementLayout>
   );
 };

@@ -20,7 +20,7 @@ export interface FieldDef {
 }
 
 /** Target schemas the importer understands. */
-export const IMPORT_SCHEMAS: Record<"properties" | "tenants", FieldDef[]> = {
+export const IMPORT_SCHEMAS: Record<"properties" | "tenants" | "units", FieldDef[]> = {
   properties: [
     { key: "name", label: "Name / Bezeichnung", type: "text", required: true,
       synonyms: ["name", "bezeichnung", "liegenschaft", "objekt", "titel", "property", "building"],
@@ -64,7 +64,42 @@ export const IMPORT_SCHEMAS: Record<"properties" | "tenants", FieldDef[]> = {
     { key: "notes", label: "Notizen", type: "text",
       synonyms: ["notizen", "bemerkung", "bemerkungen", "notes", "kommentar", "comment", "info"] },
   ],
+  units: [
+    { key: "unit_type", label: "Typ", type: "text",
+      synonyms: ["typ", "type", "art", "objektart", "kategorie", "nutzung"],
+      hint: "Wohnung, Keller, Garage, Aussenparkplatz, Lager, Gewerbe" },
+    { key: "floor_label", label: "Stockwerk", type: "text",
+      synonyms: ["stockwerk", "etage", "geschoss", "floor", "stock", "lage"],
+      hint: "UG, EG, 1.OG …" },
+    { key: "unit_number", label: "Bezeichnung / Nr.", type: "text", required: true,
+      synonyms: ["bezeichnung", "nummer", "nr", "einheit", "wohnung", "unit", "objekt", "top", "name", "unit number"],
+      hint: "z.B. TOP1, Keller 3, PP 5" },
+    { key: "rooms", label: "Zimmer", type: "number",
+      synonyms: ["zimmer", "zi", "rooms", "anzahl zimmer", "zimmeranzahl"] },
+    { key: "living_area_sqm", label: "Fläche m²", type: "number",
+      synonyms: ["fläche", "flaeche", "wohnfläche", "m2", "m²", "qm", "area", "sqm", "quadratmeter"] },
+    { key: "base_rent", label: "Nettomiete", type: "number", required: true,
+      synonyms: ["nettomiete", "miete", "rent", "base rent", "netto", "kaltmiete", "mietzins", "nettomietzins"] },
+    { key: "utilities_advance", label: "NK-Akonto", type: "number",
+      synonyms: ["nk", "nebenkosten", "akonto", "nk-akonto", "utilities", "nebenkosten akonto", "nk akonto"] },
+    { key: "notes", label: "Notizen", type: "text",
+      synonyms: ["notizen", "bemerkung", "bemerkungen", "notes", "kommentar", "comment", "info"] },
+  ],
 };
+
+// Mappt freie Typ-Bezeichnungen aus einer Excel-Liste auf unsere Enum-Werte.
+export function normalizeUnitType(raw: unknown): string {
+  const s = String(raw ?? "").toLowerCase().trim()
+    .replace(/[äà]/g, "a").replace(/[öô]/g, "o").replace(/[üû]/g, "u").replace(/ß/g, "ss");
+  if (!s) return "wohnung";
+  if (/(wohn|apartment|flat|whg|top)/.test(s)) return "wohnung";
+  if (/(gewerbe|büro|buro|laden|commercial|office|shop)/.test(s)) return "gewerbe";
+  if (/(keller|cellar|estrich|dachboden)/.test(s)) return "keller";
+  if (/(garage|einstell|tiefgarage|box)/.test(s)) return "garage";
+  if (/(aussen|aussenpark|parkplatz|parking|pp|stellplatz)/.test(s)) return "aussenparkplatz";
+  if (/(lager|storage|abstell)/.test(s)) return "lager";
+  return "sonstiges";
+}
 
 export interface ParsedSheet {
   headers: string[];
@@ -192,25 +227,36 @@ export function applyMapping(
   });
 }
 
-/** Build a template worksheet (headers + 1 example row) for download. */
-export function downloadTemplate(schema: "properties" | "tenants") {
+/** Build a template worksheet (headers + example rows) for download. */
+export function downloadTemplate(schema: "properties" | "tenants" | "units") {
   const fields = IMPORT_SCHEMAS[schema];
   const headers = fields.map((f) => f.label);
-  const example: Record<string, string> =
-    schema === "properties"
-      ? { "Name / Bezeichnung": "Seestrasse 12", "Adresse": "Seestrasse 12", "PLZ": "8640",
-          "Ort": "Rapperswil", "Kanton": "SG", "Objekttyp": "Mehrfamilienhaus",
-          "Baujahr": "1998", "Anzahl Einheiten": "6", "Notizen": "Sanierung 2020" }
-      : { "Vorname": "Anna", "Nachname": "Muster", "E-Mail": "anna.muster@example.ch",
-          "Telefon": "079 123 45 67", "Geburtsdatum": "15.04.1990", "Nationalität": "CH",
-          "Arbeitgeber": "Muster AG", "Monatseinkommen": "7500", "Notizen": "" };
-  const exampleRow = headers.map((h) => example[h] ?? "");
+
+  const examples: Record<string, Record<string, string>[]> = {
+    properties: [{ "Name / Bezeichnung": "Seestrasse 12", "Adresse": "Seestrasse 12", "PLZ": "8640",
+      "Ort": "Rapperswil", "Kanton": "SG", "Objekttyp": "Mehrfamilienhaus",
+      "Baujahr": "1998", "Anzahl Einheiten": "6", "Notizen": "Sanierung 2020" }],
+    tenants: [{ "Vorname": "Anna", "Nachname": "Muster", "E-Mail": "anna.muster@example.ch",
+      "Telefon": "079 123 45 67", "Geburtsdatum": "15.04.1990", "Nationalität": "CH",
+      "Arbeitgeber": "Muster AG", "Monatseinkommen": "7500", "Notizen": "" }],
+    units: [
+      { "Typ": "Wohnung", "Stockwerk": "EG", "Bezeichnung / Nr.": "TOP1", "Zimmer": "3.5",
+        "Fläche m²": "85", "Nettomiete": "1800", "NK-Akonto": "250", "Notizen": "" },
+      { "Typ": "Wohnung", "Stockwerk": "1.OG", "Bezeichnung / Nr.": "TOP2", "Zimmer": "4.5",
+        "Fläche m²": "110", "Nettomiete": "2200", "NK-Akonto": "300", "Notizen": "" },
+      { "Typ": "Keller", "Stockwerk": "UG", "Bezeichnung / Nr.": "Keller 1", "Zimmer": "",
+        "Fläche m²": "", "Nettomiete": "50", "NK-Akonto": "0", "Notizen": "zu TOP1" },
+      { "Typ": "Aussenparkplatz", "Stockwerk": "", "Bezeichnung / Nr.": "PP 5", "Zimmer": "",
+        "Fläche m²": "", "Nettomiete": "90", "NK-Akonto": "0", "Notizen": "" },
+    ],
+  };
+  const rows = examples[schema].map((ex) => headers.map((h) => ex[h] ?? ""));
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
-  // column widths
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(14, h.length + 2) }));
-  XLSX.utils.book_append_sheet(wb, ws, schema === "properties" ? "Liegenschaften" : "Mieter");
-  const fname = schema === "properties" ? "Vorlage-Liegenschaften.xlsx" : "Vorlage-Mieter.xlsx";
+  const sheetName = schema === "properties" ? "Liegenschaften" : schema === "tenants" ? "Mieter" : "Einheiten";
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const fname = `Vorlage-${sheetName}.xlsx`;
   XLSX.writeFile(wb, fname);
 }
