@@ -87,8 +87,8 @@ const Hero = () => {
           </div>
 
           {/* CTA Buttons */}
-          <div 
-            className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up opacity-0" 
+          <div
+            className="flex flex-col sm:flex-row gap-4 justify-center mb-20 animate-fade-in-up opacity-0"
             style={{ animationDelay: "0.8s" }}
           >
             <Button 
@@ -111,9 +111,9 @@ const Hero = () => {
       </div>
 
       {/* Scroll Indicator */}
-      <a 
+      <a
         href="#features"
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:flex flex-col items-center gap-2 text-white/60 hover:text-white transition-colors"
       >
         <span className="text-sm font-medium tracking-wider uppercase">Entdecken</span>
         <ChevronDown className="w-6 h-6 animate-bounce" />
