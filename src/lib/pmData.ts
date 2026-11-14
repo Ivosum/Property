@@ -94,6 +94,54 @@ export async function insertProperties(rows: PropertyInput[]) {
   return (data ?? []).length as number;
 }
 
+export async function setWhatsappGroupUrl(propertyId: string, url: string | null) {
+  const { error } = await sb.from("pm_properties").update({ whatsapp_group_url: url }).eq("id", propertyId);
+  if (error) throw error;
+}
+
+/**
+ * Empfänger je Liegenschaft: aktive Mieter mit E-Mail und/oder Telefon,
+ * gruppiert für E-Mail-Versand (mailto) und WhatsApp-Direktchat (wa.me).
+ */
+export async function getPropertyContacts() {
+  const [{ data: props }, { data: units }, { data: contracts }, { data: tenants }] = await Promise.all([
+    sb.from("pm_properties").select("id, name, city, whatsapp_group_url").order("name"),
+    sb.from("pm_units").select("id, property_id"),
+    sb.from("pm_contracts").select("unit_id, tenant_id, status"),
+    sb.from("pm_tenants").select("id, first_name, last_name, email, phone"),
+  ]);
+  const unitProp = new Map((units ?? []).map((u: any) => [u.id, u.property_id]));
+  const tenantById = new Map((tenants ?? []).map((t: any) => [t.id, t]));
+
+  // aktive Mieter je Liegenschaft (dedupliziert)
+  const byProp = new Map<string, Map<string, any>>();
+  (contracts ?? []).forEach((c: any) => {
+    if (c.status !== "active") return;
+    const pid = unitProp.get(c.unit_id);
+    const t = tenantById.get(c.tenant_id);
+    if (!pid || !t) return;
+    const m = byProp.get(pid) ?? new Map();
+    m.set(t.id, t);
+    byProp.set(pid, m);
+  });
+
+  return (props ?? []).map((p: any) => {
+    const contacts = [...(byProp.get(p.id)?.values() ?? [])].map((t: any) => ({
+      id: t.id,
+      name: [t.first_name, t.last_name].filter(Boolean).join(" ") || "Mieter",
+      email: t.email as string | null,
+      phone: t.phone as string | null,
+    }));
+    return {
+      id: p.id,
+      name: p.name as string,
+      city: p.city as string,
+      whatsapp_group_url: (p.whatsapp_group_url ?? null) as string | null,
+      contacts,
+    };
+  });
+}
+
 export interface UnitInput {
   property_id: string;
   unit_number: string;
