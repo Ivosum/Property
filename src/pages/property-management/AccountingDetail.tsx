@@ -16,10 +16,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Plus, Loader2, Trash2, TrendingUp, TrendingDown, Receipt, BookOpen, ListTree, Paperclip,
+  ArrowLeft, Plus, Loader2, Trash2, TrendingUp, TrendingDown, Receipt, BookOpen, ListTree, Paperclip, FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReceiptUpload from "@/components/property-management/ReceiptUpload";
+import { buildPropertyReport, type ReceiptLine } from "@/lib/propertyReport";
 
 type Tab = "journal" | "accounts";
 
@@ -32,6 +33,7 @@ const AccountingDetail = () => {
   const [tab, setTab] = useState<Tab>("journal");
   const [entryOpen, setEntryOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const { data: property } = useQuery({
     queryKey: ["accounting-property", propertyId],
@@ -75,6 +77,47 @@ const AccountingDetail = () => {
     }
   };
 
+  // Vollständiger Liegenschafts-Report (Erfolgsrechnung, Bilanz, Belege) als PDF
+  const generateReport = async () => {
+    setGenerating(true);
+    try {
+      // Belege aus den Journal-Einträgen ableiten
+      const receipts: ReceiptLine[] = entryList
+        .filter((e) => e.source === "receipt")
+        .map((e) => {
+          const amount = e.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+          return {
+            date: e.entry_date,
+            vendor: e.description.replace(/^Rechnung\s+/i, ""),
+            reference: e.reference,
+            amount,
+          };
+        });
+
+      const year = new Date().getFullYear();
+      const blob = await buildPropertyReport({
+        propertyName: property?.name ?? "Liegenschaft",
+        propertyCity: property?.city ?? "",
+        periodLabel: `Jahr ${year}`,
+        balances,
+        receipts,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Report_${(property?.name ?? "Liegenschaft").replace(/[^a-zA-Z0-9]+/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Report erstellt");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Fehler beim Report");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <PropertyManagementLayout>
       <div className="mb-6">
@@ -86,7 +129,11 @@ const AccountingDetail = () => {
             <h1 className="font-display text-2xl font-bold">{property?.name ?? "Buchhaltung"}</h1>
             <p className="text-sm text-muted-foreground">{property?.city} · Separate Buchhaltung</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={generateReport} disabled={generating}>
+              {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2" />}
+              Report (PDF)
+            </Button>
             <Button variant="outline" onClick={() => setReceiptOpen(true)}>
               <Paperclip className="w-4 h-4 mr-2" /> Beleg hochladen
             </Button>
