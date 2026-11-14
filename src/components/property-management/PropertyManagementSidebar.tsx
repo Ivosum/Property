@@ -16,6 +16,7 @@ import {
   Mail,
   Key,
   ClipboardCheck,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: "Mieter", href: "/property-management/tenants", icon: <Users className="w-5 h-5" /> },
   { label: "Mietverträge", href: "/property-management/contracts", icon: <ClipboardList className="w-5 h-5" /> },
   { label: "Finanzen", href: "/property-management/finances", icon: <CreditCard className="w-5 h-5" /> },
+  { label: "Buchhaltung", href: "/property-management/accounting", icon: <BookOpen className="w-5 h-5" /> },
   { label: "Mängelmeldungen", href: "/property-management/defects", icon: <AlertTriangle className="w-5 h-5" /> },
   { label: "Wohnungsabnahme", href: "/property-management/handover", icon: <ClipboardCheck className="w-5 h-5" /> },
   { label: "Dokumente", href: "/property-management/documents", icon: <FileText className="w-5 h-5" /> },
