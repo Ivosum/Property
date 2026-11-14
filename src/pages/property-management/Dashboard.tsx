@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
+import { Building2, Users, CreditCard, AlertTriangle, Loader2, DoorOpen } from "lucide-react";
 
 const formatCHF = (n: number) =>
   new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
@@ -12,6 +13,7 @@ const priorityLabels: Record<string, string> = { low: "Niedrig", normal: "Normal
 
 const Dashboard = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ["pm-dashboard"],
@@ -26,6 +28,7 @@ const Dashboard = () => {
 
       const units = unitsRes.data ?? [];
       const occupied = units.filter((u) => u.status === "occupied").length;
+      const vacant = units.filter((u) => u.status === "vacant").length;
       const occupancyRate = units.length > 0 ? Math.round((occupied / units.length) * 100) : 0;
 
       const urgentDefects = (defectsRes.data ?? []).filter((d) => d.priority === "urgent").length;
@@ -46,6 +49,7 @@ const Dashboard = () => {
         propertyCount: propsRes.count ?? 0,
         tenantCount: tenantsRes.count ?? 0,
         occupancyRate,
+        vacant,
         openDefectCount: defectsRes.data?.length ?? 0,
         urgentDefects,
         defects: (defectsRes.data ?? []).map((d) => ({
@@ -69,10 +73,11 @@ const Dashboard = () => {
   });
 
   const stats = [
-    { label: "Verwaltete Objekte", value: data ? String(data.propertyCount) : "–", icon: Building2 },
-    { label: "Aktive Mieter", value: data ? String(data.tenantCount) : "–", icon: Users, sub: data ? `${data.occupancyRate}% Auslastung` : undefined },
-    { label: "Offene Mängel", value: data ? String(data.openDefectCount) : "–", icon: AlertTriangle, sub: data && data.urgentDefects > 0 ? `${data.urgentDefects} dringend` : undefined },
-    { label: "Offene Zahlungen", value: data ? formatCHF(data.outstanding) : "–", icon: CreditCard },
+    { label: "Verwaltete Objekte", value: data ? String(data.propertyCount) : "–", icon: Building2, to: "/property-management/properties" },
+    { label: "Aktive Mieter", value: data ? String(data.tenantCount) : "–", icon: Users, sub: data ? `${data.occupancyRate}% Auslastung` : undefined, to: "/property-management/tenants" },
+    { label: "Leerstände", value: data ? String(data.vacant) : "–", icon: DoorOpen, sub: data && data.vacant > 0 ? "zu vermieten" : undefined, to: "/property-management/properties" },
+    { label: "Offene Mängel", value: data ? String(data.openDefectCount) : "–", icon: AlertTriangle, sub: data && data.urgentDefects > 0 ? `${data.urgentDefects} dringend` : undefined, to: "/property-management/defects" },
+    { label: "Offene Zahlungen", value: data ? formatCHF(data.outstanding) : "–", icon: CreditCard, to: "/property-management/finances" },
   ];
 
   return (
@@ -87,9 +92,9 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
         {stats.map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} onClick={() => navigate(stat.to)} className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -123,7 +128,7 @@ const Dashboard = () => {
             ) : (
               <div className="space-y-3">
                 {data!.defects.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <div key={item.id} onClick={() => navigate("/property-management/defects")} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/70">
                     <div>
                       <p className="font-medium text-sm">{item.unit}</p>
                       <p className="text-sm text-muted-foreground">{item.issue}</p>
@@ -162,7 +167,7 @@ const Dashboard = () => {
             ) : (
               <div className="space-y-3">
                 {data!.payments.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                  <div key={item.id} onClick={() => navigate("/property-management/finances")} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/70">
                     <div>
                       <p className="font-medium text-sm">{item.tenant}</p>
                     </div>

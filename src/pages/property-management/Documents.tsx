@@ -14,12 +14,16 @@ interface DocRow {
   file_url: string;
   file_size: number | null;
   created_at: string;
+  context: string; // "Liegenschaft · Einheit · Mieter"
 }
 
 const typeLabels: Record<string, string> = {
   contract: "Mietverträge",
+  utility_bill: "Nebenkostenabrechnungen",
   utility: "Nebenkostenabrechnungen",
+  handover_protocol: "Wohnungsabnahmen",
   handover: "Wohnungsabnahmen",
+  receipt: "Belege",
   correspondence: "Korrespondenz",
   other: "Sonstiges",
 };
@@ -47,12 +51,21 @@ const Documents = () => {
   const { data: documents, isLoading } = useQuery({
     queryKey: ["pm-documents"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pm_documents")
-        .select("id, name, document_type, file_url, file_size, created_at")
-        .order("created_at", { ascending: false });
+      const sb = supabase as any;
+      const [{ data, error }, { data: props }, { data: units }, { data: tenants }] = await Promise.all([
+        sb.from("pm_documents").select("id, name, document_type, file_url, file_size, created_at, property_id, unit_id, tenant_id").order("created_at", { ascending: false }),
+        sb.from("pm_properties").select("id, name"),
+        sb.from("pm_units").select("id, unit_number, floor_label"),
+        sb.from("pm_tenants").select("id, first_name, last_name"),
+      ]);
       if (error) throw error;
-      return (data ?? []) as DocRow[];
+      const propName = new Map((props ?? []).map((p: any) => [p.id, p.name]));
+      const unitName = new Map((units ?? []).map((u: any) => [u.id, [u.floor_label, u.unit_number].filter(Boolean).join(" ")]));
+      const tenantName = new Map((tenants ?? []).map((t: any) => [t.id, [t.first_name, t.last_name].filter(Boolean).join(" ")]));
+      return (data ?? []).map((d: any) => ({
+        ...d,
+        context: [propName.get(d.property_id), unitName.get(d.unit_id), tenantName.get(d.tenant_id)].filter(Boolean).join(" · "),
+      })) as DocRow[];
     },
   });
 
@@ -135,8 +148,9 @@ const Documents = () => {
                     <FileText className="w-8 h-8 text-destructive" />
                     <div>
                       <p className="font-medium text-sm">{doc.name}</p>
+                      {doc.context && <p className="text-xs text-primary/80">{doc.context}</p>}
                       <p className="text-xs text-muted-foreground">
-                        {[formatSize(doc.file_size), new Date(doc.created_at).toLocaleDateString("de-CH")].filter(Boolean).join(" • ")}
+                        {[typeLabels[doc.document_type] ?? doc.document_type, formatSize(doc.file_size), new Date(doc.created_at).toLocaleDateString("de-CH")].filter(Boolean).join(" • ")}
                       </p>
                     </div>
                   </div>

@@ -34,6 +34,7 @@ import PMDashboard from "./pages/property-management/Dashboard";
 import PMProperties from "./pages/property-management/Properties";
 import PMPropertyDetail from "./pages/property-management/PropertyDetail";
 import PMTenants from "./pages/property-management/Tenants";
+import PMTenantDetail from "./pages/property-management/TenantDetail";
 import PMContracts from "./pages/property-management/Contracts";
 import PMFinances from "./pages/property-management/Finances";
 import PMDefects from "./pages/property-management/Defects";
@@ -89,6 +90,7 @@ const App = () => (
             <Route path="/property-management/properties" element={<PMProperties />} />
             <Route path="/property-management/properties/:propertyId" element={<PMPropertyDetail />} />
             <Route path="/property-management/tenants" element={<PMTenants />} />
+            <Route path="/property-management/tenants/:tenantId" element={<PMTenantDetail />} />
             <Route path="/property-management/contracts" element={<PMContracts />} />
             <Route path="/property-management/finances" element={<PMFinances />} />
             <Route path="/property-management/defects" element={<PMDefects />} />

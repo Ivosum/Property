@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
@@ -31,6 +32,7 @@ const Tenants = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
 
@@ -133,7 +135,7 @@ const Tenants = () => {
           ) : (
             <div className="space-y-4">
               {filtered.map((tenant) => (
-                <div key={tenant.id} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer flex-wrap gap-4">
+                <div key={tenant.id} onClick={() => navigate(`/property-management/tenants/${tenant.id}`)} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer flex-wrap gap-4">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
                       <span className="text-primary font-semibold">
@@ -169,12 +171,12 @@ const Tenants = () => {
                     </span>
                     <div className="flex gap-2">
                       {tenant.email && (
-                        <Button variant="ghost" size="icon" asChild>
+                        <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
                           <a href={`mailto:${tenant.email}`}><Mail className="w-4 h-4" /></a>
                         </Button>
                       )}
                       {tenant.phone && (
-                        <Button variant="ghost" size="icon" asChild>
+                        <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
                           <a href={`tel:${tenant.phone}`}><Phone className="w-4 h-4" /></a>
                         </Button>
                       )}
