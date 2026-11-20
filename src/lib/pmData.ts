@@ -575,3 +575,110 @@ export async function insertContractGroup(params: {
   }
   return created.map((r) => r.id as string);
 }
+
+// =====================================================================
+// Bankanbindung je Liegenschaft (camt / EBICS)
+// =====================================================================
+export const BANK_ACCESS_STATUS: { value: string; label: string }[] = [
+  { value: "none", label: "Kein Zugang" },
+  { value: "requested", label: "Zugang beantragt" },
+  { value: "active", label: "Aktiv" },
+  { value: "revoked", label: "Widerrufen" },
+];
+export const BANK_ACCESS_LABEL: Record<string, string> =
+  Object.fromEntries(BANK_ACCESS_STATUS.map((s) => [s.value, s.label]));
+
+export interface BankConnectionInput {
+  property_id: string;
+  bank_name?: string | null;
+  iban?: string | null;
+  qr_iban?: string | null;
+  bic?: string | null;
+  account_holder?: string | null;
+  access_method?: string;              // manual | ebics | api
+  ebics_host_id?: string | null;
+  ebics_user_id?: string | null;
+  ebics_partner_id?: string | null;
+  ebics_url?: string | null;
+  status?: string;                     // bank_access_status
+  notes?: string | null;
+}
+
+export async function getBankConnection(propertyId: string) {
+  const { data } = await sb.from("pm_bank_connections").select("*").eq("property_id", propertyId).maybeSingle();
+  return data ?? null;
+}
+
+export async function getBankConnections() {
+  const { data } = await sb.from("pm_bank_connections").select("*");
+  return (data ?? []) as any[];
+}
+
+// Upsert je Liegenschaft. Setzt requested_at/activated_at automatisch beim Statuswechsel.
+export async function saveBankConnection(input: BankConnectionInput) {
+  const existing = await getBankConnection(input.property_id);
+  const now = new Date().toISOString();
+  const patch: any = { ...input };
+  if (input.status === "requested" && existing?.status !== "requested" && !existing?.requested_at) {
+    patch.requested_at = now;
+  }
+  if (input.status === "active" && existing?.status !== "active") {
+    patch.activated_at = now;
+  }
+  if (existing) {
+    const { error } = await sb.from("pm_bank_connections").update(patch).eq("id", existing.id);
+    if (error) throw error;
+    return existing.id as string;
+  }
+  const { data, error } = await sb.from("pm_bank_connections").insert(patch).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+// =====================================================================
+// Mahnwesen
+// =====================================================================
+export const REMINDER_STAGES: { stage: number; label: string; short: string }[] = [
+  { stage: 1, label: "1. Zahlungserinnerung", short: "1. Erinnerung" },
+  { stage: 2, label: "2. Zahlungserinnerung", short: "2. Erinnerung" },
+  { stage: 3, label: "Mahnung (Art. 257d OR)", short: "Mahnung" },
+  { stage: 4, label: "Betreibung einleiten", short: "Betreibung" },
+];
+export const REMINDER_STAGE_LABEL: Record<number, string> =
+  Object.fromEntries(REMINDER_STAGES.map((s) => [s.stage, s.label]));
+
+export async function getReminderSettings() {
+  const { data } = await sb.from("pm_reminder_settings").select("*").eq("id", 1).maybeSingle();
+  return data ?? {
+    fee_stage_1: 0, fee_stage_2: 20, fee_stage_3: 40, fee_stage_4: 0,
+    days_until_overdue: 5, days_between_stages: 10, grace_days_terminate: 30,
+  };
+}
+
+export async function saveReminderSettings(patch: Record<string, number>) {
+  const { error } = await sb.from("pm_reminder_settings")
+    .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", 1);
+  if (error) throw error;
+}
+
+// Überfällige Zahlungen markieren (pending -> overdue). Liefert Anzahl.
+export async function markOverduePayments(): Promise<number> {
+  const { data, error } = await sb.rpc("pm_mark_overdue");
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+// Nächste Mahnstufe auslösen: schreibt Protokollzeile + erhöht Stufe/Gebühr.
+export async function addReminder(paymentId: string, stage: number, channel = "email") {
+  const { data, error } = await sb.rpc("pm_add_reminder", {
+    p_payment_id: paymentId, p_stage: stage, p_channel: channel,
+  });
+  if (error) throw error;
+  return data as string; // reminder id
+}
+
+// Mahnungen zu einer Zahlung (Protokoll)
+export async function getReminders(paymentId: string) {
+  const { data } = await sb.from("pm_reminders").select("*").eq("payment_id", paymentId).order("stage");
+  return (data ?? []) as any[];
+}
