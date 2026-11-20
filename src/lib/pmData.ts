@@ -328,6 +328,13 @@ export async function getUnits(propertyId: string): Promise<UnitRow[]> {
   return (data ?? []) as UnitRow[];
 }
 
+export interface CoTenant {
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  address?: string | null;
+}
+
 export interface TenantInput {
   first_name: string;
   last_name: string;
@@ -338,6 +345,7 @@ export interface TenantInput {
   employer?: string | null;
   monthly_income?: number | null;
   notes?: string | null;
+  co_tenants?: CoTenant[];
 }
 
 function cleanTenant(t: TenantInput) {
@@ -364,6 +372,7 @@ function cleanTenant(t: TenantInput) {
     employer: t.employer ?? null,
     monthly_income: t.monthly_income ?? null,
     notes: t.notes ?? null,
+    co_tenants: (t.co_tenants ?? []).filter((c) => (c.first_name?.trim() || c.last_name?.trim())),
   };
 }
 

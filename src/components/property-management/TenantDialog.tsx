@@ -11,9 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Home } from "lucide-react";
+import { Loader2, Home, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
-import { insertTenant, insertContractGroup, UNIT_TYPE_LABEL, FLOOR_LABELS, type TenantInput } from "@/lib/pmData";
+import { insertTenant, insertContractGroup, UNIT_TYPE_LABEL, FLOOR_LABELS, type TenantInput, type CoTenant } from "@/lib/pmData";
 
 const sb = supabase as any;
 
@@ -43,6 +43,12 @@ const TenantDialog = ({ open, onOpenChange, onSaved }: Props) => {
   const [form, setForm] = useState<TenantInput>(empty);
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof TenantInput>(k: K, v: TenantInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Mitmieter / Partner
+  const [coTenants, setCoTenants] = useState<CoTenant[]>([]);
+  const addCo = () => setCoTenants((c) => [...c, { first_name: "", last_name: "", date_of_birth: "", address: "" }]);
+  const updateCo = (i: number, patch: Partial<CoTenant>) => setCoTenants((c) => c.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const removeCo = (i: number) => setCoTenants((c) => c.filter((_, j) => j !== i));
 
   // Vertrags-Teil (optional)
   const [withContract, setWithContract] = useState(false);
@@ -87,7 +93,7 @@ const TenantDialog = ({ open, onOpenChange, onSaved }: Props) => {
   const totalNk = selectedUnits.reduce((s, u) => s + (Number(u.utilities_advance) || 0), 0);
 
   const reset = () => {
-    setForm(empty); setWithContract(false); setPropertyId(""); setSelected(new Set());
+    setForm(empty); setCoTenants([]); setWithContract(false); setPropertyId(""); setSelected(new Set());
     setStart(todayISO()); setDeposit("");
   };
 
@@ -102,7 +108,7 @@ const TenantDialog = ({ open, onOpenChange, onSaved }: Props) => {
     }
     setSaving(true);
     try {
-      const tenantId = await insertTenant(form);
+      const tenantId = await insertTenant({ ...form, co_tenants: coTenants });
 
       if (withContract && selectedUnits.length > 0) {
         await insertContractGroup({
@@ -155,6 +161,35 @@ const TenantDialog = ({ open, onOpenChange, onSaved }: Props) => {
             <div><Label>Monatseinkommen CHF</Label><Input type="number" value={form.monthly_income ?? ""} onChange={(e) => set("monthly_income", e.target.value ? Number(e.target.value) : null)} /></div>
           </div>
           <div><Label>Notizen</Label><Textarea value={form.notes ?? ""} onChange={(e) => set("notes", e.target.value)} rows={2} /></div>
+
+          {/* Mitmieter / Partner */}
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-medium text-sm flex items-center gap-2"><Users className="w-4 h-4" /> Mitmieter / Partner</span>
+              <Button type="button" variant="outline" size="sm" onClick={addCo}><Plus className="w-4 h-4 mr-1" /> Hinzufügen</Button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">Partnerin/Partner oder weitere Mitmieter (erscheinen im Mietvertrag).</p>
+            {coTenants.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-1">Kein Mitmieter – nur bei Bedarf hinzufügen.</p>
+            ) : (
+              <div className="space-y-3">
+                {coTenants.map((c, i) => (
+                  <div key={i} className="rounded-md bg-secondary/20 p-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-muted-foreground">Mitmieter {i + 1}</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeCo(i)}><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><Label className="text-xs">Vorname</Label><Input className="h-9" value={c.first_name} onChange={(e) => updateCo(i, { first_name: e.target.value })} /></div>
+                      <div><Label className="text-xs">Nachname</Label><Input className="h-9" value={c.last_name} onChange={(e) => updateCo(i, { last_name: e.target.value })} /></div>
+                      <div><Label className="text-xs">Geburtsdatum</Label><Input className="h-9" value={c.date_of_birth ?? ""} onChange={(e) => updateCo(i, { date_of_birth: e.target.value })} placeholder="TT.MM.JJJJ" /></div>
+                      <div><Label className="text-xs">Adresse</Label><Input className="h-9" value={c.address ?? ""} onChange={(e) => updateCo(i, { address: e.target.value })} placeholder="Strasse, PLZ Ort" /></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Objekte zuweisen (Vertrag) */}
           <div className="rounded-lg border p-3">
