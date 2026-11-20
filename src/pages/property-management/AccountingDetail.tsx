@@ -21,8 +21,11 @@ import {
 import { toast } from "sonner";
 import ReceiptUpload from "@/components/property-management/ReceiptUpload";
 import { buildPropertyReport, type ReceiptLine } from "@/lib/propertyReport";
+import BookingSuggestions from "@/components/property-management/BookingSuggestions";
+import { getSuggestions } from "@/lib/bookingEngine";
+import { Sparkles } from "lucide-react";
 
-type Tab = "journal" | "accounts";
+type Tab = "journal" | "accounts" | "suggestions";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -56,6 +59,13 @@ const AccountingDetail = () => {
     queryFn: () => getJournal(propertyId!),
   });
 
+  const { data: suggestions } = useQuery({
+    queryKey: ["booking-suggestions", propertyId],
+    enabled: !!propertyId,
+    queryFn: () => getSuggestions(propertyId!, "pending"),
+  });
+  const suggestionCount = (suggestions ?? []).length;
+
   const accountList = accounts ?? [];
   const entryList = entries ?? [];
   const balances = computeBalances(accountList, entryList);
@@ -65,6 +75,7 @@ const AccountingDetail = () => {
     queryClient.invalidateQueries({ queryKey: ["accounting-journal", propertyId] });
     queryClient.invalidateQueries({ queryKey: ["accounting-accounts", propertyId] });
     queryClient.invalidateQueries({ queryKey: ["accounting-overview"] });
+    queryClient.invalidateQueries({ queryKey: ["booking-suggestions", propertyId] });
   };
 
   const handleDelete = async (id: string) => {
@@ -179,6 +190,12 @@ const AccountingDetail = () => {
         <Button variant={tab === "accounts" ? "default" : "outline"} size="sm" onClick={() => setTab("accounts")}>
           <ListTree className="w-4 h-4 mr-2" /> Kontenplan
         </Button>
+        <Button variant={tab === "suggestions" ? "default" : "outline"} size="sm" onClick={() => setTab("suggestions")}>
+          <Sparkles className="w-4 h-4 mr-2" /> Buchungsvorschläge
+          {suggestionCount > 0 && (
+            <span className="ml-2 text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{suggestionCount}</span>
+          )}
+        </Button>
       </div>
 
       {tab === "journal" ? (
@@ -246,6 +263,8 @@ const AccountingDetail = () => {
             )}
           </CardContent>
         </Card>
+      ) : tab === "suggestions" ? (
+        <BookingSuggestions propertyId={propertyId!} accounts={accountList} onChanged={refresh} />
       ) : (
         <Card>
           <CardHeader><CardTitle>Kontenplan & Saldi</CardTitle></CardHeader>

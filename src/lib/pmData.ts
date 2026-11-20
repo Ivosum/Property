@@ -687,18 +687,20 @@ export async function getReminders(paymentId: string) {
 // camt-Import: Kontoauszug abgleichen und offene Zahlungen verbuchen
 // =====================================================================
 import { parseCamt, normalizeRef, type CamtStatement } from "@/lib/camt";
+import { classifyMovement, createSuggestion } from "@/lib/bookingEngine";
 
 export interface CamtMatchResult {
   statementId: string | null;
-  total: number;       // Gutschriften im Auszug
-  matched: number;     // automatisch zugeordnet + verbucht
-  unmatched: number;
+  total: number;       // alle Bewegungen im Auszug
+  matched: number;     // Miete automatisch zugeordnet + verbucht
+  unmatched: number;   // Gutschriften ohne Miet-Zuordnung
+  suggested: number;   // Buchungsvorschläge erzeugt (Belastungen + nicht-Miete)
   details: {
     amount: number;
     date: string | null;
     reference: string | null;
     debtor: string | null;
-    status: "matched" | "unmatched";
+    status: "matched" | "unmatched" | "suggested";
     paymentId?: string;
     tenant?: string;
   }[];
@@ -717,6 +719,7 @@ export interface CamtMatchResult {
 export async function importCamtForProperty(propertyId: string, xmlText: string, fileName?: string): Promise<CamtMatchResult> {
   const stmt: CamtStatement = parseCamt(xmlText);
   const credits = stmt.entries.filter((e) => e.creditDebit === "CRDT");
+  const debits = stmt.entries.filter((e) => e.creditDebit === "DBIT");
 
   // offene Zahlungen dieser Liegenschaft laden (über Vertrag -> Einheit -> Liegenschaft)
   const [{ data: units }, { data: contracts }, { data: tenants }] = await Promise.all([
@@ -756,6 +759,7 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
   const used = new Set<string>();
   const details: CamtMatchResult["details"] = [];
   let matched = 0;
+  let suggested = 0;
 
   for (const e of credits) {
     let pay: any = null;
@@ -789,19 +793,44 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
       }
       details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "matched", paymentId: pay.id, tenant: tenantName.get(pay.tenant_id) });
     } else {
+      // Keine offene Miete -> Buchungsvorschlag erzeugen (Gutschrift)
+      let bankEntryId: string | null = null;
       if (statementId) {
         try {
-          await sb.from("pm_bank_entries").insert({
+          const { data: be } = await sb.from("pm_bank_entries").insert({
             statement_id: statementId, property_id: propertyId,
             booking_date: e.bookingDate, value_date: e.valueDate,
             amount: e.amount, currency: e.currency, reference: e.reference,
             debtor_name: e.debtorName, debtor_iban: e.debtorIban, remittance_info: e.remittanceInfo,
             match_status: "unmatched",
-          });
+          }).select("id").single();
+          bankEntryId = be?.id ?? null;
         } catch { /* ignore */ }
       }
+      await makeSuggestion(propertyId, bankEntryId, e, "in");
+      suggested++;
       details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "unmatched" });
     }
+  }
+
+  // Belastungen (Geldausgänge) -> immer Buchungsvorschlag (Aufwand)
+  for (const e of debits) {
+    let bankEntryId: string | null = null;
+    if (statementId) {
+      try {
+        const { data: be } = await sb.from("pm_bank_entries").insert({
+          statement_id: statementId, property_id: propertyId,
+          booking_date: e.bookingDate, value_date: e.valueDate,
+          amount: -Math.abs(e.amount), currency: e.currency, reference: e.reference,
+          debtor_name: e.debtorName, debtor_iban: e.debtorIban, remittance_info: e.remittanceInfo,
+          match_status: "unmatched",
+        }).select("id").single();
+        bankEntryId = be?.id ?? null;
+      } catch { /* ignore */ }
+    }
+    await makeSuggestion(propertyId, bankEntryId, e, "out");
+    suggested++;
+    details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "suggested" });
   }
 
   // Zähler + last_import am Statement/Connection aktualisieren
@@ -812,5 +841,28 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
     await sb.from("pm_bank_connections").update({ last_import_at: new Date().toISOString() }).eq("property_id", propertyId);
   } catch { /* ignore */ }
 
-  return { statementId, total: credits.length, matched, unmatched: credits.length - matched, details };
+  return { statementId, total: credits.length + debits.length, matched, unmatched: credits.length - matched, suggested, details };
+}
+
+// Hilfsfunktion: klassifiziert eine Bankbewegung und legt einen Buchungsvorschlag an.
+async function makeSuggestion(
+  propertyId: string,
+  bankEntryId: string | null,
+  e: { amount: number; bookingDate: string | null; reference: string | null; debtorName: string | null; remittanceInfo: string | null },
+  direction: "in" | "out",
+) {
+  try {
+    const mv = {
+      direction, amount: Math.abs(e.amount),
+      counterparty: e.debtorName, reference: e.reference, text: e.remittanceInfo,
+    };
+    const cls = await classifyMovement(propertyId, mv, true);
+    const desc = [e.debtorName, e.remittanceInfo].filter(Boolean).join(" – ")
+      || (direction === "in" ? "Zahlungseingang" : "Zahlungsausgang");
+    await createSuggestion({
+      propertyId, bankEntryId, entryDate: e.bookingDate ?? new Date().toISOString().slice(0, 10),
+      description: desc, reference: e.reference, counterparty: e.debtorName,
+      amount: Math.abs(e.amount), direction, classification: cls,
+    });
+  } catch { /* Vorschlag ist best effort */ }
 }

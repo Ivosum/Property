@@ -99,10 +99,11 @@ const CamtImportDialog = ({ open, onOpenChange, defaultPropertyId, onDone }: Pro
 
           {result && (
             <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center gap-4 text-sm">
-                <span className="flex items-center gap-1 text-green-600"><Check className="w-4 h-4" />{result.matched} zugeordnet</span>
+              <div className="flex items-center gap-4 text-sm flex-wrap">
+                <span className="flex items-center gap-1 text-green-600"><Check className="w-4 h-4" />{result.matched} Miete verbucht</span>
+                <span className="flex items-center gap-1 text-blue-600">{result.suggested} Buchungsvorschläge</span>
                 <span className="flex items-center gap-1 text-muted-foreground"><X className="w-4 h-4" />{result.unmatched} offen</span>
-                <span className="text-muted-foreground ml-auto">{result.total} Gutschriften total</span>
+                <span className="text-muted-foreground ml-auto">{result.total} Bewegungen total</span>
               </div>
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {result.details.map((d, i) => (
@@ -114,15 +115,17 @@ const CamtImportDialog = ({ open, onOpenChange, defaultPropertyId, onDone }: Pro
                     </div>
                     {d.status === "matched" ? (
                       <span className="text-xs text-green-700 whitespace-nowrap">→ {d.tenant} ✓</span>
+                    ) : d.status === "suggested" ? (
+                      <span className="text-xs text-blue-600 whitespace-nowrap">→ Vorschlag</span>
                     ) : (
                       <span className="text-xs text-amber-600 whitespace-nowrap">nicht zugeordnet</span>
                     )}
                   </div>
                 ))}
               </div>
-              {result.unmatched > 0 && (
+              {result.suggested > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Nicht zugeordnete Eingänge: Referenz stimmt nicht mit einer offenen Miete überein oder Betrag ist nicht eindeutig. Diese bitte manuell unter „Mietzahlungen" verbuchen.
+                  Für Belastungen und nicht zugeordnete Eingänge wurden Buchungsvorschläge erstellt. Diese finden Sie in der Buchhaltung der Liegenschaft unter „Buchungsvorschläge" – dort nur noch bestätigen oder Konto anpassen.
                 </p>
               )}
             </div>
