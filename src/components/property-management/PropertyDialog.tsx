@@ -26,6 +26,10 @@ interface Props {
 
 const NONE = "__none__";
 
+// Spaltenraster der Einheiten-Schnelltabelle – füllt den breiten Dialog,
+// schrumpft gleichmässig mit (kein horizontales Scrollen).
+const UNIT_GRID = "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_auto]";
+
 interface UnitRowDraft {
   key: number;
   unit_type: string;
@@ -153,7 +157,7 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="w-[94vw] max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Liegenschaft hinzufügen</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div>
@@ -220,16 +224,15 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
             {rows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-3 text-center">Noch keine Einheiten – auf „Zeile" klicken oder später hinzufügen.</p>
             ) : (
-              <div className="overflow-x-auto -mx-1 px-1">
-              <div className="space-y-2 min-w-[760px]">
+              <div className="space-y-2">
                 {/* Kopfzeile */}
-                <div className="grid grid-cols-[150px_90px_130px_70px_80px_100px_90px_150px_40px] gap-2 text-xs font-medium text-muted-foreground px-1">
+                <div className={`grid ${UNIT_GRID} gap-2 text-xs font-medium text-muted-foreground px-1`}>
                   <span>Typ</span><span>Stockwerk</span><span>Bezeichnung</span><span>Zi.</span><span>m²</span><span>Miete</span><span>NK</span><span>zu Wohnung</span><span></span>
                 </div>
                 {rows.map((r) => {
                   const isFlat = r.unit_type === "wohnung" || r.unit_type === "gewerbe";
                   return (
-                    <div key={r.key} className="grid grid-cols-[150px_90px_130px_70px_80px_100px_90px_150px_40px] gap-2 items-center">
+                    <div key={r.key} className={`grid ${UNIT_GRID} gap-2 items-center`}>
                       <Select value={r.unit_type} onValueChange={(v) => updateRow(r.key, { unit_type: v, parentRef: null })}>
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>{UNIT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
@@ -264,7 +267,6 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
                     </div>
                   );
                 })}
-              </div>
               </div>
             )}
           </div>
