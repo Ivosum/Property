@@ -717,6 +717,28 @@ export interface CamtMatchResult {
  *      (nur wenn eindeutig genau eine passt)
  */
 export async function importCamtForProperty(propertyId: string, xmlText: string, fileName?: string): Promise<CamtMatchResult> {
+  // Bevorzugt serverseitig verarbeiten (stabil bei grossen Auszügen, KI-Key bleibt
+  // auf dem Server). Fällt die Function aus/ist nicht deployt, läuft der Abgleich
+  // clientseitig weiter (unten).
+  try {
+    const { data, error } = await sb.functions.invoke("import-camt", {
+      body: { property_id: propertyId, xml: xmlText, file_name: fileName },
+    });
+    if (!error && data && typeof data.matched === "number") {
+      return {
+        statementId: data.statementId ?? null,
+        total: data.total ?? 0,
+        matched: data.matched ?? 0,
+        unmatched: Math.max(0, (data.total ?? 0) - (data.matched ?? 0) - (data.suggested ?? 0)),
+        suggested: data.suggested ?? 0,
+        details: (data.details ?? []).map((d: any) => ({
+          amount: d.amount, date: d.date ?? null, reference: d.reference ?? null,
+          debtor: d.debtor ?? null, status: d.status, tenant: d.tenant,
+        })),
+      };
+    }
+  } catch { /* Fallback: clientseitig unten */ }
+
   const stmt: CamtStatement = parseCamt(xmlText);
   const credits = stmt.entries.filter((e) => e.creditDebit === "CRDT");
   const debits = stmt.entries.filter((e) => e.creditDebit === "DBIT");
