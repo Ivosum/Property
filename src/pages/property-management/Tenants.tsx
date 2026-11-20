@@ -23,10 +23,65 @@ interface TenantRow {
   unit: string | null;
   rent: number | null;
   status: string;
+  propertyId: string | null;
+  propertyName: string;
 }
+
+const NO_PROPERTY = "__none__";
 
 const formatCHF = (n: number) =>
   new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
+
+const TenantRowItem = ({ tenant, navigate }: { tenant: TenantRow; navigate: (to: string) => void }) => (
+  <div onClick={() => navigate(`/property-management/tenants/${tenant.id}`)} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer flex-wrap gap-4">
+    <div className="flex items-center gap-4">
+      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+        <span className="text-primary font-semibold">
+          {tenant.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+        </span>
+      </div>
+      <div>
+        <p className="font-medium">{tenant.name}</p>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+          {tenant.unit && (
+            <span className="flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {tenant.unit}
+            </span>
+          )}
+          {tenant.email && <span className="truncate">{tenant.email}</span>}
+        </div>
+      </div>
+    </div>
+    <div className="flex items-center gap-6">
+      <div className="text-right">
+        <p className="font-semibold">{tenant.rent != null ? formatCHF(tenant.rent) : "–"}</p>
+        <p className="text-xs text-muted-foreground">Monatsmiete</p>
+      </div>
+      <span className={`text-xs px-2 py-1 rounded-full ${
+        tenant.status === "Aktiv"
+          ? "bg-green-100 text-green-700"
+          : tenant.status === "Kündigung"
+          ? "bg-orange-100 text-orange-700"
+          : "bg-muted text-muted-foreground"
+      }`}>
+        {tenant.status}
+      </span>
+      <div className="flex gap-2">
+        {tenant.email && (
+          <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
+            <a href={`mailto:${tenant.email}`}><Mail className="w-4 h-4" /></a>
+          </Button>
+        )}
+        {tenant.phone && (
+          <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
+            <a href={`tel:${tenant.phone}`}><Phone className="w-4 h-4" /></a>
+          </Button>
+        )}
+      </div>
+    </div>
+  </div>
+);
 
 const Tenants = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -44,13 +99,15 @@ const Tenants = () => {
   const { data: tenants, isLoading } = useQuery({
     queryKey: ["pm-tenants"],
     queryFn: async () => {
-      const [{ data: ten }, { data: contracts }, { data: units }] = await Promise.all([
+      const [{ data: ten }, { data: contracts }, { data: units }, { data: props }] = await Promise.all([
         supabase.from("pm_tenants").select("id, first_name, last_name, email, phone"),
         supabase.from("pm_contracts").select("tenant_id, unit_id, base_rent, status"),
-        supabase.from("pm_units").select("id, unit_number, property_id"),
+        supabase.from("pm_units").select("id, unit_number, floor_label, property_id"),
+        supabase.from("pm_properties").select("id, name"),
       ]);
 
       const unitById = new Map((units ?? []).map((u) => [u.id, u]));
+      const propName = new Map((props ?? []).map((p) => [p.id, p.name]));
       // aktiven/jüngsten Vertrag je Mieter
       const contractByTenant = new Map<string, { unit_id: string; base_rent: number; status: string }>();
       (contracts ?? []).forEach((c) => {
@@ -63,14 +120,17 @@ const Tenants = () => {
       return (ten ?? []).map((t) => {
         const c = contractByTenant.get(t.id);
         const u = c ? unitById.get(c.unit_id) : undefined;
+        const pid = u?.property_id ?? null;
         return {
           id: t.id,
           name: [t.first_name, t.last_name].filter(Boolean).join(" ") || "Unbenannt",
           email: t.email,
           phone: t.phone,
-          unit: u ? `Einheit ${u.unit_number}` : null,
+          unit: u ? [u.floor_label, u.unit_number].filter(Boolean).join(" ") || `Einheit ${u.unit_number}` : null,
           rent: c?.base_rent ?? null,
           status: c?.status === "active" ? "Aktiv" : c?.status === "terminated" ? "Kündigung" : c ? "Vertrag" : "Kein Vertrag",
+          propertyId: pid,
+          propertyName: pid ? (propName.get(pid) ?? "Liegenschaft") : "Ohne Zuordnung",
         };
       }) as TenantRow[];
     },
@@ -78,7 +138,28 @@ const Tenants = () => {
 
   const list = tenants ?? [];
   const term = searchTerm.trim().toLowerCase();
-  const filtered = list.filter((t) => !term || t.name.toLowerCase().includes(term));
+  const filtered = list.filter((t) =>
+    !term ||
+    t.name.toLowerCase().includes(term) ||
+    (t.email ?? "").toLowerCase().includes(term) ||
+    (t.unit ?? "").toLowerCase().includes(term));
+
+  // Gruppieren nach Liegenschaft (nur ohne aktive Suche)
+  const groups = (() => {
+    const map = new Map<string, { id: string; name: string; rows: TenantRow[] }>();
+    filtered.forEach((t) => {
+      const key = t.propertyId ?? NO_PROPERTY;
+      const g = map.get(key) ?? { id: key, name: t.propertyName, rows: [] };
+      g.rows.push(t);
+      map.set(key, g);
+    });
+    // Liegenschaften alphabetisch, "Ohne Zuordnung" ans Ende
+    return [...map.values()].sort((a, b) => {
+      if (a.id === NO_PROPERTY) return 1;
+      if (b.id === NO_PROPERTY) return -1;
+      return a.name.localeCompare(b.name, "de");
+    });
+  })();
 
   return (
     <PropertyManagementLayout>
@@ -137,55 +218,27 @@ const Tenants = () => {
               <Users className="w-10 h-10 mb-3 opacity-40" />
               <p>Keine Mieter gefunden.</p>
             </div>
-          ) : (
+          ) : term ? (
+            // Suche aktiv: flache Trefferliste
             <div className="space-y-4">
               {filtered.map((tenant) => (
-                <div key={tenant.id} onClick={() => navigate(`/property-management/tenants/${tenant.id}`)} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer flex-wrap gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                      <span className="text-primary font-semibold">
-                        {tenant.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-medium">{tenant.name}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                        {tenant.unit && (
-                          <span className="flex items-center gap-1">
-                            <Building2 className="w-3 h-3" />
-                            {tenant.unit}
-                          </span>
-                        )}
-                        {tenant.email && <span className="truncate">{tenant.email}</span>}
-                      </div>
-                    </div>
+                <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} />
+              ))}
+            </div>
+          ) : (
+            // Keine Suche: nach Liegenschaft gruppiert
+            <div className="space-y-8">
+              {groups.map((group) => (
+                <div key={group.id}>
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                    <Building2 className="w-4 h-4 text-primary" />
+                    <h3 className="font-semibold">{group.name}</h3>
+                    <span className="text-xs text-muted-foreground">({group.rows.length})</span>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="font-semibold">{tenant.rent != null ? formatCHF(tenant.rent) : "–"}</p>
-                      <p className="text-xs text-muted-foreground">Monatsmiete</p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      tenant.status === "Aktiv"
-                        ? "bg-green-100 text-green-700"
-                        : tenant.status === "Kündigung"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {tenant.status}
-                    </span>
-                    <div className="flex gap-2">
-                      {tenant.email && (
-                        <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
-                          <a href={`mailto:${tenant.email}`}><Mail className="w-4 h-4" /></a>
-                        </Button>
-                      )}
-                      {tenant.phone && (
-                        <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()}>
-                          <a href={`tel:${tenant.phone}`}><Phone className="w-4 h-4" /></a>
-                        </Button>
-                      )}
-                    </div>
+                  <div className="space-y-3">
+                    {group.rows.map((tenant) => (
+                      <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} />
+                    ))}
                   </div>
                 </div>
               ))}
