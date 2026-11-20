@@ -267,3 +267,14 @@
     @apply text-muted-foreground text-lg md:text-xl leading-relaxed;
   }
 }
+
+/* Zahlenfelder ohne Stepper-Pfeile (damit der Wert lesbar bleibt) */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

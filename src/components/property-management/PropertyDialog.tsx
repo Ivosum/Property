@@ -39,10 +39,41 @@ interface UnitRowDraft {
 }
 
 let rowSeq = 1;
-const newRow = (): UnitRowDraft => ({
-  key: rowSeq++, unit_type: "wohnung", floor_label: "EG", unit_number: "",
-  rooms: "", area: "", base_rent: "", nk: "", parentRef: null,
-});
+
+// Hebt eine Bezeichnung um eins an: "TOP1" -> "TOP2", "Keller 3" -> "Keller 4",
+// "PP 5" -> "PP 6". Ohne Zahl: " 2" anhängen.
+const nextLabel = (label: string): string => {
+  const s = label.trim();
+  if (!s) return "";
+  const m = s.match(/^(.*?)(\d+)(\D*)$/);
+  if (m) {
+    const [, prefix, num, suffix] = m;
+    return `${prefix}${Number(num) + 1}${suffix}`;
+  }
+  return `${s} 2`;
+};
+
+// Standard-Bezeichnung je Typ, wenn die Vorzeile leer ist
+const defaultLabel = (unit_type: string): string =>
+  unit_type === "keller" ? "Keller 1"
+  : unit_type === "garage" ? "Garage 1"
+  : unit_type === "aussenparkplatz" ? "PP 1"
+  : unit_type === "lager" ? "Lager 1"
+  : "TOP1";
+
+// Erzeugt die nächste Zeile – übernimmt Typ/Stockwerk der letzten Zeile und
+// zählt die Bezeichnung automatisch hoch (TOP1 -> TOP2 ...).
+const newRow = (prev?: UnitRowDraft): UnitRowDraft => {
+  const unit_type = prev?.unit_type ?? "wohnung";
+  const floor_label = prev?.floor_label ?? "EG";
+  const unit_number = prev?.unit_number?.trim()
+    ? nextLabel(prev.unit_number)
+    : defaultLabel(unit_type);
+  return {
+    key: rowSeq++, unit_type, floor_label, unit_number,
+    rooms: "", area: "", base_rent: "", nk: "", parentRef: null,
+  };
+};
 
 const empty: PropertyInput = {
   name: "", address: "", postal_code: "", city: "", canton: "SZ",
@@ -181,7 +212,7 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
                 <p className="font-medium text-sm">Einheiten (optional)</p>
                 <p className="text-xs text-muted-foreground">Wohnungen, Keller, Parkplätze gleich miterfassen.</p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => setRows((rs) => [...rs, newRow()])}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setRows((rs) => [...rs, newRow(rs[rs.length - 1])])}>
                 <Plus className="w-4 h-4 mr-1" /> Zeile
               </Button>
             </div>
@@ -189,15 +220,16 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
             {rows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-3 text-center">Noch keine Einheiten – auf „Zeile" klicken oder später hinzufügen.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="overflow-x-auto -mx-1 px-1">
+              <div className="space-y-2 min-w-[760px]">
                 {/* Kopfzeile */}
-                <div className="hidden md:grid grid-cols-[1.2fr_0.8fr_1fr_0.6fr_0.7fr_0.8fr_0.7fr_1.2fr_auto] gap-2 text-xs text-muted-foreground px-1">
-                  <span>Typ</span><span>Stockw.</span><span>Bezeichnung</span><span>Zi.</span><span>m²</span><span>Miete</span><span>NK</span><span>zu Wohnung</span><span></span>
+                <div className="grid grid-cols-[150px_90px_130px_70px_80px_100px_90px_150px_40px] gap-2 text-xs font-medium text-muted-foreground px-1">
+                  <span>Typ</span><span>Stockwerk</span><span>Bezeichnung</span><span>Zi.</span><span>m²</span><span>Miete</span><span>NK</span><span>zu Wohnung</span><span></span>
                 </div>
                 {rows.map((r) => {
                   const isFlat = r.unit_type === "wohnung" || r.unit_type === "gewerbe";
                   return (
-                    <div key={r.key} className="grid grid-cols-2 md:grid-cols-[1.2fr_0.8fr_1fr_0.6fr_0.7fr_0.8fr_0.7fr_1.2fr_auto] gap-2 items-center">
+                    <div key={r.key} className="grid grid-cols-[150px_90px_130px_70px_80px_100px_90px_150px_40px] gap-2 items-center">
                       <Select value={r.unit_type} onValueChange={(v) => updateRow(r.key, { unit_type: v, parentRef: null })}>
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>{UNIT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
@@ -207,10 +239,10 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
                         <SelectContent>{FLOOR_LABELS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                       </Select>
                       <Input className="h-9" value={r.unit_number} onChange={(e) => updateRow(r.key, { unit_number: e.target.value })} placeholder={isFlat ? "TOP1" : "PP 5"} />
-                      <Input className="h-9" type="number" step="0.5" value={r.rooms} disabled={!isFlat} onChange={(e) => updateRow(r.key, { rooms: e.target.value })} placeholder="3.5" />
-                      <Input className="h-9" type="number" value={r.area} disabled={!isFlat} onChange={(e) => updateRow(r.key, { area: e.target.value })} placeholder="85" />
-                      <Input className="h-9" type="number" value={r.base_rent} onChange={(e) => updateRow(r.key, { base_rent: e.target.value })} placeholder="1800" />
-                      <Input className="h-9" type="number" value={r.nk} onChange={(e) => updateRow(r.key, { nk: e.target.value })} placeholder="250" />
+                      <Input className="h-9 no-spinner" type="number" step="0.5" value={r.rooms} disabled={!isFlat} onChange={(e) => updateRow(r.key, { rooms: e.target.value })} placeholder="3.5" />
+                      <Input className="h-9 no-spinner" type="number" value={r.area} disabled={!isFlat} onChange={(e) => updateRow(r.key, { area: e.target.value })} placeholder="85" />
+                      <Input className="h-9 no-spinner" type="number" value={r.base_rent} onChange={(e) => updateRow(r.key, { base_rent: e.target.value })} placeholder="1800" />
+                      <Input className="h-9 no-spinner" type="number" value={r.nk} onChange={(e) => updateRow(r.key, { nk: e.target.value })} placeholder="250" />
                       {isFlat ? (
                         <span className="text-xs text-muted-foreground px-1">–</span>
                       ) : (
@@ -232,6 +264,7 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
                     </div>
                   );
                 })}
+              </div>
               </div>
             )}
           </div>
