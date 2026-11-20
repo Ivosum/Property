@@ -26,10 +26,6 @@ interface Props {
 
 const NONE = "__none__";
 
-// Spaltenraster der Einheiten-Schnelltabelle – füllt den breiten Dialog,
-// schrumpft gleichmässig mit (kein horizontales Scrollen).
-const UNIT_GRID = "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_auto]";
-
 interface UnitRowDraft {
   key: number;
   unit_type: string;
@@ -157,7 +153,7 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="w-[94vw] max-w-5xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="w-[92vw] max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Liegenschaft hinzufügen</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div>
@@ -224,46 +220,74 @@ const PropertyDialog = ({ open, onOpenChange, onSaved }: Props) => {
             {rows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-3 text-center">Noch keine Einheiten – auf „Zeile" klicken oder später hinzufügen.</p>
             ) : (
-              <div className="space-y-2">
-                {/* Kopfzeile */}
-                <div className={`grid ${UNIT_GRID} gap-2 text-xs font-medium text-muted-foreground px-1`}>
-                  <span>Typ</span><span>Stockwerk</span><span>Bezeichnung</span><span>Zi.</span><span>m²</span><span>Miete</span><span>NK</span><span>zu Wohnung</span><span></span>
-                </div>
-                {rows.map((r) => {
+              <div className="space-y-3">
+                {rows.map((r, idx) => {
                   const isFlat = r.unit_type === "wohnung" || r.unit_type === "gewerbe";
                   return (
-                    <div key={r.key} className={`grid ${UNIT_GRID} gap-2 items-center`}>
-                      <Select value={r.unit_type} onValueChange={(v) => updateRow(r.key, { unit_type: v, parentRef: null })}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>{UNIT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Select value={r.floor_label} onValueChange={(v) => updateRow(r.key, { floor_label: v })}>
-                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>{FLOOR_LABELS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Input className="h-9" value={r.unit_number} onChange={(e) => updateRow(r.key, { unit_number: e.target.value })} placeholder={isFlat ? "TOP1" : "PP 5"} />
-                      <Input className="h-9 no-spinner" type="number" step="0.5" value={r.rooms} disabled={!isFlat} onChange={(e) => updateRow(r.key, { rooms: e.target.value })} placeholder="3.5" />
-                      <Input className="h-9 no-spinner" type="number" value={r.area} disabled={!isFlat} onChange={(e) => updateRow(r.key, { area: e.target.value })} placeholder="85" />
-                      <Input className="h-9 no-spinner" type="number" value={r.base_rent} onChange={(e) => updateRow(r.key, { base_rent: e.target.value })} placeholder="1800" />
-                      <Input className="h-9 no-spinner" type="number" value={r.nk} onChange={(e) => updateRow(r.key, { nk: e.target.value })} placeholder="250" />
-                      {isFlat ? (
-                        <span className="text-xs text-muted-foreground px-1">–</span>
-                      ) : (
-                        <Select value={r.parentRef != null ? String(r.parentRef) : NONE} onValueChange={(v) => updateRow(r.key, { parentRef: v === NONE ? null : Number(v) })}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="– keine –" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>– keine –</SelectItem>
-                            {flatRows.filter((f) => f.unit_number.trim()).map((f) => (
-                              <SelectItem key={f.key} value={String(f.key)}>
-                                <span className="flex items-center gap-1"><Link2 className="w-3 h-3" />{[f.floor_label, f.unit_number].filter(Boolean).join(" ")}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => removeRow(r.key)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    <div key={r.key} className="rounded-lg border bg-secondary/20 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">Einheit {idx + 1}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeRow(r.key)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      {/* Felder umbrechen automatisch – immer alles sichtbar, kein Scrollen */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
+                        <div>
+                          <Label className="text-xs">Typ</Label>
+                          <Select value={r.unit_type} onValueChange={(v) => updateRow(r.key, { unit_type: v, parentRef: null })}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>{UNIT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Stockwerk</Label>
+                          <Select value={r.floor_label} onValueChange={(v) => updateRow(r.key, { floor_label: v })}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>{FLOOR_LABELS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Bezeichnung</Label>
+                          <Input className="h-9" value={r.unit_number} onChange={(e) => updateRow(r.key, { unit_number: e.target.value })} placeholder={isFlat ? "TOP1" : "PP 5"} />
+                        </div>
+                        {isFlat && (
+                          <>
+                            <div>
+                              <Label className="text-xs">Zimmer</Label>
+                              <Input className="h-9 no-spinner" type="number" step="0.5" value={r.rooms} onChange={(e) => updateRow(r.key, { rooms: e.target.value })} placeholder="3.5" />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Fläche m²</Label>
+                              <Input className="h-9 no-spinner" type="number" value={r.area} onChange={(e) => updateRow(r.key, { area: e.target.value })} placeholder="85" />
+                            </div>
+                          </>
+                        )}
+                        <div>
+                          <Label className="text-xs">Nettomiete</Label>
+                          <Input className="h-9 no-spinner" type="number" value={r.base_rent} onChange={(e) => updateRow(r.key, { base_rent: e.target.value })} placeholder="1800" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">NK-Akonto</Label>
+                          <Input className="h-9 no-spinner" type="number" value={r.nk} onChange={(e) => updateRow(r.key, { nk: e.target.value })} placeholder="250" />
+                        </div>
+                        {!isFlat && (
+                          <div>
+                            <Label className="text-xs">Gehört zu Wohnung</Label>
+                            <Select value={r.parentRef != null ? String(r.parentRef) : NONE} onValueChange={(v) => updateRow(r.key, { parentRef: v === NONE ? null : Number(v) })}>
+                              <SelectTrigger className="h-9"><SelectValue placeholder="– keine –" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NONE}>– keine –</SelectItem>
+                                {flatRows.filter((f) => f.unit_number.trim()).map((f) => (
+                                  <SelectItem key={f.key} value={String(f.key)}>
+                                    <span className="flex items-center gap-1"><Link2 className="w-3 h-3" />{[f.floor_label, f.unit_number].filter(Boolean).join(" ")}</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
