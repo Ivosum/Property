@@ -4,6 +4,7 @@ import PlatformAccess from "@/components/PlatformAccess";
 import Features from "@/components/Features";
 import HowItWorks from "@/components/HowItWorks";
 import FinancingCalculator from "@/components/FinancingCalculator";
+import PricingTeaser from "@/components/PricingTeaser";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
 
@@ -17,6 +18,7 @@ const Index = () => {
         <HowItWorks />
         <PlatformAccess />
         <FinancingCalculator />
+        <PricingTeaser />
         <CTA />
       </main>
       <Footer />

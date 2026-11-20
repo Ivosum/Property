@@ -38,6 +38,9 @@ const Header = () => {
             <a href="#platforms" className="text-muted-foreground hover:text-foreground transition-colors">
               Plattformen
             </a>
+            <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">
+              Preise
+            </Link>
           </nav>
 
           {/* Desktop CTA - Login Dropdown */}
@@ -107,7 +110,10 @@ const Header = () => {
               <a href="#platforms" className="text-muted-foreground hover:text-foreground transition-colors py-2">
                 Plattformen
               </a>
-              
+              <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors py-2">
+                Preise
+              </Link>
+
               <div className="flex flex-col gap-2 pt-4 border-t border-border">
                 <p className="text-sm font-medium text-muted-foreground mb-2">Anmelden als:</p>
                 <Link to="/auth" onClick={() => setIsMenuOpen(false)}>
