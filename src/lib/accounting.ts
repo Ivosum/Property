@@ -65,6 +65,36 @@ export async function getAccounts(propertyId: string): Promise<Account[]> {
   return (data ?? []) as Account[];
 }
 
+// --- Kontenplan bearbeiten ---
+export async function createAccount(params: {
+  property_id: string; code: string; name: string; type: AccountType; sort_order?: number;
+}): Promise<string> {
+  const { data, error } = await sb.from("pm_accounts").insert({
+    property_id: params.property_id, code: params.code.trim(), name: params.name.trim(),
+    type: params.type, is_system: false, sort_order: params.sort_order ?? 500,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function updateAccount(id: string, patch: { code?: string; name?: string; type?: AccountType; sort_order?: number }): Promise<void> {
+  const clean: Record<string, unknown> = {};
+  if (patch.code != null) clean.code = patch.code.trim();
+  if (patch.name != null) clean.name = patch.name.trim();
+  if (patch.type != null) clean.type = patch.type;
+  if (patch.sort_order != null) clean.sort_order = patch.sort_order;
+  const { error } = await sb.from("pm_accounts").update(clean).eq("id", id);
+  if (error) throw error;
+}
+
+// Löscht ein Konto. Verweigert, wenn bereits Buchungszeilen darauf existieren.
+export async function deleteAccount(id: string): Promise<void> {
+  const { count } = await sb.from("pm_journal_lines").select("id", { count: "exact", head: true }).eq("account_id", id);
+  if ((count ?? 0) > 0) throw new Error("Konto hat Buchungen und kann nicht gelöscht werden.");
+  const { error } = await sb.from("pm_accounts").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // --- Journal mit Zeilen ---
 export interface EntryWithLines extends JournalEntry {
   lines: (JournalLine & { account?: Account })[];

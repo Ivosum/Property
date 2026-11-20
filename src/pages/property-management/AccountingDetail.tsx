@@ -22,8 +22,12 @@ import { toast } from "sonner";
 import ReceiptUpload from "@/components/property-management/ReceiptUpload";
 import { buildPropertyReport, type ReceiptLine } from "@/lib/propertyReport";
 import BookingSuggestions from "@/components/property-management/BookingSuggestions";
+import AccountsEditor from "@/components/property-management/AccountsEditor";
+import BankConnectionDialog from "@/components/property-management/BankConnectionDialog";
+import CamtImportDialog from "@/components/property-management/CamtImportDialog";
 import { getSuggestions } from "@/lib/bookingEngine";
-import { Sparkles } from "lucide-react";
+import { getBankConnection, BANK_ACCESS_LABEL } from "@/lib/pmData";
+import { Sparkles, Landmark, FileCode2 } from "lucide-react";
 
 type Tab = "journal" | "accounts" | "suggestions";
 
@@ -66,6 +70,14 @@ const AccountingDetail = () => {
   });
   const suggestionCount = (suggestions ?? []).length;
 
+  const { data: bankConn } = useQuery({
+    queryKey: ["accounting-bank", propertyId],
+    enabled: !!propertyId,
+    queryFn: () => getBankConnection(propertyId!),
+  });
+  const [bankOpen, setBankOpen] = useState(false);
+  const [camtOpen, setCamtOpen] = useState(false);
+
   const accountList = accounts ?? [];
   const entryList = entries ?? [];
   const balances = computeBalances(accountList, entryList);
@@ -76,6 +88,7 @@ const AccountingDetail = () => {
     queryClient.invalidateQueries({ queryKey: ["accounting-accounts", propertyId] });
     queryClient.invalidateQueries({ queryKey: ["accounting-overview"] });
     queryClient.invalidateQueries({ queryKey: ["booking-suggestions", propertyId] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-bank", propertyId] });
   };
 
   const handleDelete = async (id: string) => {
@@ -182,6 +195,39 @@ const AccountingDetail = () => {
         </Card>
       </div>
 
+      {/* Bankanbindung dieser Liegenschaft */}
+      <Card className="mb-6">
+        <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Landmark className="w-5 h-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium">Bankanbindung</p>
+              <p className="text-sm text-muted-foreground truncate">
+                {bankConn?.bank_name ? bankConn.bank_name : "Keine Bank hinterlegt"}
+                {bankConn?.iban ? ` · ${bankConn.iban}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs px-2 py-1 rounded-full ${
+              bankConn?.status === "active" ? "bg-green-100 text-green-700" :
+              bankConn?.status === "requested" ? "bg-amber-100 text-amber-700" :
+              "bg-muted text-muted-foreground"
+            }`}>
+              {BANK_ACCESS_LABEL[bankConn?.status ?? "none"] ?? "Kein Zugang"}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setCamtOpen(true)}>
+              <FileCode2 className="w-4 h-4 mr-2" /> Auszug importieren
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setBankOpen(true)}>
+              {bankConn ? "Bearbeiten" : "Einrichten"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Tabs */}
       <div className="flex gap-2 mb-4">
         <Button variant={tab === "journal" ? "default" : "outline"} size="sm" onClick={() => setTab("journal")}>
@@ -266,34 +312,25 @@ const AccountingDetail = () => {
       ) : tab === "suggestions" ? (
         <BookingSuggestions propertyId={propertyId!} accounts={accountList} onChanged={refresh} />
       ) : (
-        <Card>
-          <CardHeader><CardTitle>Kontenplan & Saldi</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Konto</th>
-                    <th className="text-left py-2 px-3 font-medium">Bezeichnung</th>
-                    <th className="text-left py-2 px-3 font-medium">Typ</th>
-                    <th className="text-right py-2 px-3 font-medium">Saldo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {balances.map((b) => (
-                    <tr key={b.account.id} className="border-b hover:bg-secondary/20">
-                      <td className="py-2 px-3 font-mono">{b.account.code}</td>
-                      <td className="py-2 px-3">{b.account.name}</td>
-                      <td className="py-2 px-3 text-muted-foreground">{accountTypeLabels[b.account.type]}</td>
-                      <td className="py-2 px-3 text-right font-medium">{formatCHF(b.balance)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <AccountsEditor propertyId={propertyId!} balances={balances} onChanged={refresh} />
       )}
+
+      {/* Bankanbindung */}
+      {propertyId && (
+        <BankConnectionDialog
+          open={bankOpen}
+          onOpenChange={setBankOpen}
+          propertyId={propertyId}
+          propertyName={property?.name ?? undefined}
+          onSaved={refresh}
+        />
+      )}
+      <CamtImportDialog
+        open={camtOpen}
+        onOpenChange={setCamtOpen}
+        defaultPropertyId={propertyId ?? null}
+        onDone={refresh}
+      />
 
       {/* Buchung erfassen */}
       <EntryDialog

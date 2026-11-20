@@ -32,17 +32,16 @@ const Accounting = () => {
 
       const result: PropRow[] = [];
       for (const p of props ?? []) {
-        const [accounts, entries] = await Promise.all([getAccounts(p.id), getJournal(p.id)]);
-        const balances = computeBalances(accounts, entries);
-        const inc = computeIncomeStatement(balances);
-        result.push({
-          id: p.id,
-          name: p.name,
-          city: p.city,
-          income: inc.income,
-          expense: inc.expense,
-          result: inc.result,
-        });
+        // Buchhaltung je Liegenschaft robust berechnen – ein Fehler bei einer
+        // Liegenschaft darf die ganze Liste nicht leeren.
+        try {
+          const [accounts, entries] = await Promise.all([getAccounts(p.id), getJournal(p.id)]);
+          const balances = computeBalances(accounts, entries);
+          const inc = computeIncomeStatement(balances);
+          result.push({ id: p.id, name: p.name, city: p.city, income: inc.income, expense: inc.expense, result: inc.result });
+        } catch {
+          result.push({ id: p.id, name: p.name, city: p.city, income: 0, expense: 0, result: 0 });
+        }
       }
       return result;
     },
