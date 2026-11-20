@@ -34,7 +34,12 @@ const Tenants = () => {
   const [importOpen, setImportOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["pm-tenants"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-properties"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-contracts"] });
+    queryClient.invalidateQueries({ queryKey: ["pm-finances"] });
+  };
 
   const { data: tenants, isLoading } = useQuery({
     queryKey: ["pm-tenants"],
