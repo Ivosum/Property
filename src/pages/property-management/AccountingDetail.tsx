@@ -27,9 +27,10 @@ import BankConnectionDialog from "@/components/property-management/BankConnectio
 import CamtImportDialog from "@/components/property-management/CamtImportDialog";
 import { getSuggestions } from "@/lib/bookingEngine";
 import { getBankConnection, BANK_ACCESS_LABEL } from "@/lib/pmData";
-import { Sparkles, Landmark, FileCode2 } from "lucide-react";
+import OpenItemsPanel from "@/components/property-management/OpenItemsPanel";
+import { Sparkles, Landmark, FileCode2, Wallet } from "lucide-react";
 
-type Tab = "journal" | "accounts" | "suggestions";
+type Tab = "journal" | "accounts" | "suggestions" | "openitems";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -236,6 +237,9 @@ const AccountingDetail = () => {
         <Button variant={tab === "accounts" ? "default" : "outline"} size="sm" onClick={() => setTab("accounts")}>
           <ListTree className="w-4 h-4 mr-2" /> Kontenplan
         </Button>
+        <Button variant={tab === "openitems" ? "default" : "outline"} size="sm" onClick={() => setTab("openitems")}>
+          <Wallet className="w-4 h-4 mr-2" /> Offene Posten
+        </Button>
         <Button variant={tab === "suggestions" ? "default" : "outline"} size="sm" onClick={() => setTab("suggestions")}>
           <Sparkles className="w-4 h-4 mr-2" /> Buchungsvorschläge
           {suggestionCount > 0 && (
@@ -309,6 +313,8 @@ const AccountingDetail = () => {
             )}
           </CardContent>
         </Card>
+      ) : tab === "openitems" ? (
+        <OpenItemsPanel propertyId={propertyId!} showProperty={false} />
       ) : tab === "suggestions" ? (
         <BookingSuggestions propertyId={propertyId!} accounts={accountList} onChanged={refresh} />
       ) : (

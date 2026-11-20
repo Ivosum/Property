@@ -14,6 +14,8 @@ import TenantDialog from "@/components/property-management/TenantDialog";
 import ImportDialog from "@/components/property-management/ImportDialog";
 import { insertTenants, type TenantInput } from "@/lib/pmData";
 import { downloadTemplate } from "@/lib/importMapping";
+import { getTenantHealth, type HealthColor } from "@/lib/openItems";
+import { CircleCheck, CircleAlert, CircleX } from "lucide-react";
 
 interface TenantRow {
   id: string;
@@ -32,13 +34,26 @@ const NO_PROPERTY = "__none__";
 const formatCHF = (n: number) =>
   new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(n);
 
-const TenantRowItem = ({ tenant, navigate }: { tenant: TenantRow; navigate: (to: string) => void }) => (
+const HEALTH_META: Record<HealthColor, { cls: string; icon: typeof CircleCheck; label: string }> = {
+  green: { cls: "text-emerald-600", icon: CircleCheck, label: "Pünktlich" },
+  amber: { cls: "text-amber-500", icon: CircleAlert, label: "Beobachten" },
+  red: { cls: "text-rose-600", icon: CircleX, label: "Zahlungsrisiko" },
+};
+
+const TenantRowItem = ({ tenant, navigate, health }: {
+  tenant: TenantRow; navigate: (to: string) => void; health?: { color: HealthColor; reason: string };
+}) => (
   <div onClick={() => navigate(`/property-management/tenants/${tenant.id}`)} className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer flex-wrap gap-4">
     <div className="flex items-center gap-4">
-      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+      <div className="relative w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
         <span className="text-primary font-semibold">
           {tenant.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
         </span>
+        {health && (() => { const H = HEALTH_META[health.color]; return (
+          <span className="absolute -bottom-0.5 -right-0.5 bg-background rounded-full" title={`${H.label}${health.reason ? " · " + health.reason : ""}`}>
+            <H.icon className={`w-4 h-4 ${H.cls}`} />
+          </span>
+        ); })()}
       </div>
       <div>
         <p className="font-medium">{tenant.name}</p>
@@ -136,6 +151,11 @@ const Tenants = () => {
     },
   });
 
+  const { data: health } = useQuery({
+    queryKey: ["tenant-health"],
+    queryFn: () => getTenantHealth(),
+  });
+
   const list = tenants ?? [];
   const term = searchTerm.trim().toLowerCase();
   const filtered = list.filter((t) =>
@@ -222,7 +242,7 @@ const Tenants = () => {
             // Suche aktiv: flache Trefferliste
             <div className="space-y-4">
               {filtered.map((tenant) => (
-                <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} />
+                <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} health={health?.get(tenant.id)} />
               ))}
             </div>
           ) : (
@@ -237,7 +257,7 @@ const Tenants = () => {
                   </div>
                   <div className="space-y-3">
                     {group.rows.map((tenant) => (
-                      <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} />
+                      <TenantRowItem key={tenant.id} tenant={tenant} navigate={navigate} health={health?.get(tenant.id)} />
                     ))}
                   </div>
                 </div>

@@ -167,10 +167,16 @@ Deno.serve(async (req) => {
       .map((a: any) => `${a.code} ${a.name} (${a.type === "income" ? "Ertrag" : "Aufwand"})`).join("\n");
 
     const { data: openPays } = await supabase.from("pm_payments")
-      .select("id, tenant_id, contract_id, amount, reference, status").in("status", ["pending", "overdue"]);
+      .select("id, tenant_id, contract_id, amount, reference, status, reminder_fees, paid_amount, due_date").in("status", ["pending", "overdue"]);
     const open = (openPays ?? []).filter((p: any) => contractIds.has(p.contract_id));
     const byRef = new Map<string, any>();
-    open.forEach((p: any) => { const r = normRef(p.reference); if (r) byRef.set(r, p); });
+    const openByTenant = new Map<string, any[]>();
+    open.forEach((p: any) => {
+      const r = normRef(p.reference); if (r) byRef.set(r, p);
+      const arr = openByTenant.get(p.tenant_id) ?? []; arr.push(p); openByTenant.set(p.tenant_id, arr);
+    });
+    openByTenant.forEach((arr) => arr.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()));
+    const openAmount = (p: any) => (Number(p.amount) + Number(p.reminder_fees ?? 0)) - Number(p.paid_amount ?? 0);
 
     // gelernte Regeln
     const { data: rules } = await supabase.from("pm_booking_rules").select("*")
@@ -233,14 +239,31 @@ Deno.serve(async (req) => {
       if (!pay) { const c = open.filter((p: any) => !used.has(p.id) && Math.abs(Number(p.amount) - e.amount) < 0.01); if (c.length === 1) pay = c[0]; }
 
       if (pay) {
-        used.add(pay.id); matched++;
-        await supabase.from("pm_payments").update({ status: "paid", paid_date: e.bookingDate ?? new Date().toISOString().slice(0, 10) }).eq("id", pay.id);
+        // Betrag auf offene Posten des Mieters anrechnen (älteste zuerst):
+        // Teil-, exakte, Sammel- und Überzahlung.
+        const queue = (openByTenant.get(pay.tenant_id) ?? []).filter((p: any) => !used.has(p.id) && openAmount(p) > 0.005);
+        queue.sort((a, b) => (a.id === pay.id ? -1 : b.id === pay.id ? 1 : new Date(a.due_date).getTime() - new Date(b.due_date).getTime()));
+        let rest = e.amount; const covered: string[] = [];
+        for (const q of queue) {
+          if (rest <= 0.005) break;
+          const before = openAmount(q);
+          const { data: back } = await supabase.rpc("pm_apply_payment", { p_payment_id: q.id, p_amount: rest, p_date: e.bookingDate ?? new Date().toISOString().slice(0, 10) });
+          const newRest = Number(back ?? 0); const applied = rest - newRest;
+          if (applied > 0.005) covered.push(q.id);
+          if (applied >= before - 0.005) used.add(q.id);
+          rest = newRest;
+        }
+        matched++;
+        if (rest > 0.005) {
+          await supabase.from("pm_credits").insert({ tenant_id: pay.tenant_id, property_id, amount: rest, source: "overpayment", note: "Überzahlung aus Kontoauszug" });
+        }
         if (statementId) await supabase.from("pm_bank_entries").insert({
           statement_id: statementId, property_id, booking_date: e.bookingDate, value_date: e.valueDate,
           amount: e.amount, currency: e.currency, reference: e.reference, debtor_name: e.debtorName, debtor_iban: e.debtorIban,
           remittance_info: e.remittance, matched_payment_id: pay.id, match_status: "matched",
         });
-        details.push({ amount: e.amount, debtor: e.debtorName, status: "matched", tenant: tenantName.get(pay.tenant_id) });
+        const note = covered.length > 1 ? ` (${covered.length} Mieten)` : rest > 0.005 ? " (Überzahlung → Guthaben)" : "";
+        details.push({ amount: e.amount, debtor: (e.debtorName ?? "") + note, status: "matched", tenant: tenantName.get(pay.tenant_id) });
       } else {
         let beId: string | null = null;
         if (statementId) {

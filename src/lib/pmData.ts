@@ -758,9 +758,17 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
     .in("status", ["pending", "overdue"]);
   const open = (openPays ?? []).filter((p: any) => contractIds.has(p.contract_id));
 
-  // Index: Referenz -> Zahlung
+  // Index: Referenz -> Zahlung, und Mieter -> offene Zahlungen (für Sammel-/Teilzahlung)
   const byRef = new Map<string, any>();
-  open.forEach((p: any) => { const r = normalizeRef(p.reference); if (r) byRef.set(r, p); });
+  const openByTenant = new Map<string, any[]>();
+  open.forEach((p: any) => {
+    const r = normalizeRef(p.reference); if (r) byRef.set(r, p);
+    const arr = openByTenant.get(p.tenant_id) ?? [];
+    arr.push(p); openByTenant.set(p.tenant_id, arr);
+  });
+  // je Mieter nach Fälligkeit (älteste zuerst) sortieren
+  openByTenant.forEach((arr) => arr.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()));
+  const openAmount = (p: any) => (Number(p.amount) + Number(p.reminder_fees ?? 0)) - Number(p.paid_amount ?? 0);
 
   // Statement-Datensatz anlegen
   let statementId: string | null = null;
@@ -796,12 +804,38 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
     }
 
     if (pay) {
-      used.add(pay.id);
+      // Betrag auf die offenen Posten des Mieters anrechnen (älteste zuerst):
+      // deckt Teilzahlung, exakte Zahlung, Sammelzahlung mehrerer Mieten und
+      // Überzahlung (Rest -> Guthaben) ab.
+      const tenantId = pay.tenant_id;
+      const queue = (openByTenant.get(tenantId) ?? []).filter((p: any) => !used.has(p.id) && openAmount(p) > 0.005);
+      // sicherstellen, dass die referenzierte Zahlung zuerst drankommt
+      queue.sort((a, b) => (a.id === pay.id ? -1 : b.id === pay.id ? 1 : new Date(a.due_date).getTime() - new Date(b.due_date).getTime()));
+
+      let rest = e.amount;
+      const coveredIds: string[] = [];
+      for (const q of queue) {
+        if (rest <= 0.005) break;
+        const openBefore = openAmount(q);
+        try {
+          const back = await sb.rpc("pm_apply_payment", { p_payment_id: q.id, p_amount: rest, p_date: e.bookingDate ?? new Date().toISOString().slice(0, 10) });
+          const newRest = Number(back ?? 0);
+          const applied = rest - newRest;
+          if (applied > 0.005) coveredIds.push(q.id);
+          // Posten vollständig gedeckt -> nicht erneut verwenden
+          if (applied >= openBefore - 0.005) used.add(q.id);
+          rest = newRest;
+        } catch { break; }
+      }
       matched++;
-      try {
-        await markPaymentPaid(pay.id, e.bookingDate ?? undefined);
-      } catch { /* Verbuchung best effort */ }
-      // Bank-Entry protokollieren
+
+      // Überzahlung -> Guthaben
+      if (rest > 0.005) {
+        try {
+          await sb.from("pm_credits").insert({ tenant_id: tenantId, property_id: propertyId, amount: rest, source: "overpayment", note: "Überzahlung aus Kontoauszug" });
+        } catch { /* ignore */ }
+      }
+
       if (statementId) {
         try {
           await sb.from("pm_bank_entries").insert({
@@ -809,11 +843,12 @@ export async function importCamtForProperty(propertyId: string, xmlText: string,
             booking_date: e.bookingDate, value_date: e.valueDate,
             amount: e.amount, currency: e.currency, reference: e.reference,
             debtor_name: e.debtorName, debtor_iban: e.debtorIban, remittance_info: e.remittanceInfo,
-            matched_payment_id: pay.id, match_status: "matched",
+            matched_payment_id: pay.id, match_status: coveredIds.length > 1 ? "matched" : "matched",
           });
         } catch { /* ignore */ }
       }
-      details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "matched", paymentId: pay.id, tenant: tenantName.get(pay.tenant_id) });
+      const note = coveredIds.length > 1 ? ` (${coveredIds.length} Mieten)` : rest > 0.005 ? " (Überzahlung → Guthaben)" : "";
+      details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: (e.debtorName ?? "") + note, status: "matched", paymentId: pay.id, tenant: tenantName.get(tenantId) });
     } else {
       // Keine offene Miete -> Buchungsvorschlag erzeugen (Gutschrift)
       let bankEntryId: string | null = null;

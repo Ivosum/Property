@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   getAccounts, getJournal, computeBalances, computeIncomeStatement, formatCHF,
 } from "@/lib/accounting";
+import { getOpenItems } from "@/lib/openItems";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, Loader2, ChevronRight, Layers, TrendingUp, TrendingDown } from "lucide-react";
+import { Building2, Loader2, ChevronRight, Layers } from "lucide-react";
 
 interface PropRow {
   id: string;
@@ -16,142 +17,148 @@ interface PropRow {
   income: number;
   expense: number;
   result: number;
+  open: number;      // offene Posten
+  overdue: number;   // davon überfällig
 }
 
 const Accounting = () => {
   const navigate = useNavigate();
 
-  const { data: rows, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["accounting-overview"],
     queryFn: async () => {
-      const { data: props, error } = await supabase
-        .from("pm_properties")
-        .select("id, name, city")
-        .order("name");
+      const [{ data: props, error }, openData] = await Promise.all([
+        supabase.from("pm_properties").select("id, name, city").order("name"),
+        getOpenItems(),
+      ]);
       if (error) throw error;
 
-      const result: PropRow[] = [];
+      // offene Posten je Liegenschaft summieren
+      const openByProp = new Map<string, { open: number; overdue: number }>();
+      openData.debtors.forEach((d) => {
+        if (!d.propertyId) return;
+        const cur = openByProp.get(d.propertyId) ?? { open: 0, overdue: 0 };
+        cur.open += d.total;
+        cur.overdue += d.d30 + d.d60 + d.d90;
+        openByProp.set(d.propertyId, cur);
+      });
+
+      const rows: PropRow[] = [];
       for (const p of props ?? []) {
-        // Buchhaltung je Liegenschaft robust berechnen – ein Fehler bei einer
-        // Liegenschaft darf die ganze Liste nicht leeren.
+        const o = openByProp.get(p.id) ?? { open: 0, overdue: 0 };
         try {
           const [accounts, entries] = await Promise.all([getAccounts(p.id), getJournal(p.id)]);
-          const balances = computeBalances(accounts, entries);
-          const inc = computeIncomeStatement(balances);
-          result.push({ id: p.id, name: p.name, city: p.city, income: inc.income, expense: inc.expense, result: inc.result });
+          const inc = computeIncomeStatement(computeBalances(accounts, entries));
+          rows.push({ id: p.id, name: p.name, city: p.city, income: inc.income, expense: inc.expense, result: inc.result, open: o.open, overdue: o.overdue });
         } catch {
-          result.push({ id: p.id, name: p.name, city: p.city, income: 0, expense: 0, result: 0 });
+          rows.push({ id: p.id, name: p.name, city: p.city, income: 0, expense: 0, result: 0, open: o.open, overdue: o.overdue });
         }
       }
-      return result;
+      return { rows, summary: openData.summary };
     },
   });
 
-  const list = rows ?? [];
+  const list = data?.rows ?? [];
   const totalIncome = list.reduce((s, r) => s + r.income, 0);
   const totalExpense = list.reduce((s, r) => s + r.expense, 0);
   const totalResult = totalIncome - totalExpense;
+  const totalOpen = data?.summary.total ?? 0;
+  const totalOverdue = (data?.summary.d30 ?? 0) + (data?.summary.d60 ?? 0) + (data?.summary.d90 ?? 0);
 
   return (
     <PropertyManagementLayout>
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+      <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div>
-          <h1 className="font-display text-3xl font-bold">Buchhaltung</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Buchhaltung</h1>
           <p className="text-muted-foreground mt-1">Separate Buchhaltung je Liegenschaft</p>
         </div>
-        <Button onClick={() => navigate("/property-management/accounting/consolidated")}>
-          <Layers className="w-4 h-4 mr-2" />
-          Liegenschaften zusammenführen
+        <Button variant="outline" onClick={() => navigate("/property-management/accounting/consolidated")}>
+          <Layers className="w-4 h-4 mr-2" /> Zusammenführen
         </Button>
       </div>
 
-      {/* Gesamtkennzahlen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <TrendingUp className="w-5 h-5 text-green-500" />
-            </div>
-            <p className="text-2xl font-bold">{isLoading ? "–" : formatCHF(totalIncome)}</p>
-            <p className="text-sm text-muted-foreground">Ertrag gesamt</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <TrendingDown className="w-5 h-5 text-destructive" />
-            </div>
-            <p className="text-2xl font-bold">{isLoading ? "–" : formatCHF(totalExpense)}</p>
-            <p className="text-sm text-muted-foreground">Aufwand gesamt</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
-          <CardContent className="p-6">
-            <p className={`text-2xl font-bold ${totalResult >= 0 ? "text-green-600" : "text-destructive"}`}>
-              {isLoading ? "–" : formatCHF(totalResult)}
-            </p>
-            <p className="text-sm text-muted-foreground">Ergebnis gesamt</p>
-          </CardContent>
-        </Card>
+      {/* Kennzahlen */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Kpi label="Ertrag" value={isLoading ? null : totalIncome} tone="pos" />
+        <Kpi label="Aufwand" value={isLoading ? null : totalExpense} tone="neg" />
+        <Kpi label="Ergebnis" value={isLoading ? null : totalResult} tone="result" big />
+        <Kpi label="Offene Posten" value={isLoading ? null : totalOpen} tone="open" sub={totalOverdue > 0 ? `${formatCHF(totalOverdue)} überfällig` : "nichts überfällig"} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Liegenschaften</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              Buchhaltungen werden geladen...
-            </div>
-          ) : list.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-              <Building2 className="w-10 h-10 mb-3 opacity-40" />
-              <p>Noch keine Liegenschaften.</p>
-              <p className="text-sm mt-1">Legen Sie zuerst eine Liegenschaft an – der Kontenplan wird automatisch erstellt.</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {list.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => navigate(`/property-management/accounting/${r.id}`)}
-                  className="w-full flex items-center justify-between py-4 px-2 text-left hover:bg-secondary/30 rounded-lg transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
-                      <Building2 className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{r.name}</p>
-                      <p className="text-sm text-muted-foreground">{r.city}</p>
-                    </div>
+      {/* Liegenschaften */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-3">Liegenschaften</h2>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Buchhaltungen werden geladen...
+          </div>
+        ) : list.length === 0 ? (
+          <Card><CardContent className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+            <Building2 className="w-10 h-10 mb-3 opacity-40" />
+            <p className="font-medium text-foreground">Noch keine Liegenschaften</p>
+            <p className="text-sm mt-1">Legen Sie eine Liegenschaft an – der Kontenplan wird automatisch erstellt.</p>
+          </CardContent></Card>
+        ) : (
+          <div className="rounded-xl border bg-card divide-y overflow-hidden">
+            {list.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => navigate(`/property-management/accounting/${r.id}`)}
+                className="w-full grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 text-left hover:bg-muted/40 transition-colors"
+              >
+                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Building2 className="w-5 h-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{r.name}</p>
+                  <p className="text-sm text-muted-foreground truncate">{r.city}</p>
+                  <div className="flex items-center gap-4 mt-1.5 text-xs">
+                    <span className="text-muted-foreground">Ertrag <span className="text-emerald-600 font-medium tabular-nums">{formatCHF(r.income)}</span></span>
+                    <span className="text-muted-foreground hidden sm:inline">Aufwand <span className="text-rose-600 font-medium tabular-nums">{formatCHF(r.expense)}</span></span>
+                    {r.overdue > 0 && (
+                      <span className="inline-flex items-center gap-1 text-rose-600 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> {formatCHF(r.overdue)} überfällig
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs text-muted-foreground">Ertrag</p>
-                      <p className="font-medium text-green-600">{formatCHF(r.income)}</p>
-                    </div>
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs text-muted-foreground">Aufwand</p>
-                      <p className="font-medium text-destructive">{formatCHF(r.expense)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Ergebnis</p>
-                      <p className={`font-semibold ${r.result >= 0 ? "text-green-600" : "text-destructive"}`}>
-                        {formatCHF(r.result)}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Ergebnis</p>
+                    <p className={`font-semibold tabular-nums ${r.result >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCHF(r.result)}</p>
                   </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </PropertyManagementLayout>
+  );
+};
+
+const Kpi = ({ label, value, tone, sub, big }: {
+  label: string; value: number | null; tone: "pos" | "neg" | "result" | "open"; sub?: string; big?: boolean;
+}) => {
+  const color =
+    tone === "pos" ? "text-emerald-600" :
+    tone === "neg" ? "text-rose-600" :
+    tone === "open" ? "text-amber-600" :
+    (value ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600";
+  const accent =
+    tone === "pos" ? "bg-emerald-400" :
+    tone === "neg" ? "bg-rose-400" :
+    tone === "open" ? "bg-amber-400" : "bg-primary";
+  return (
+    <div className={`relative rounded-xl border bg-card p-5 overflow-hidden ${big ? "ring-1 ring-primary/15" : ""}`}>
+      <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} />
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-bold tabular-nums ${big ? "text-3xl" : "text-2xl"} ${color}`}>
+        {value == null ? "–" : formatCHF(value)}
+      </p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    </div>
   );
 };
 
