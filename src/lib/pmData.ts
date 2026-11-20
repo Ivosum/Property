@@ -43,6 +43,79 @@ export async function currentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+// ---------------------------------------------------------------------
+// Eigentümer-Stammdaten (wiederverwendbar über Liegenschaften)
+// ---------------------------------------------------------------------
+export const OWNER_TYPES = [
+  { value: "private", label: "Privatperson" },
+  { value: "company", label: "Firma" },
+];
+
+export interface OwnerInput {
+  owner_type: string;
+  name: string;
+  contact_person?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  postal_code?: string | null;
+  city?: string | null;
+  iban?: string | null;
+  bank_name?: string | null;
+  notes?: string | null;
+}
+
+export interface OwnerRow extends OwnerInput {
+  id: string;
+}
+
+export async function getOwners(): Promise<OwnerRow[]> {
+  const { data, error } = await sb
+    .from("pm_owners")
+    .select("id, owner_type, name, contact_person, email, phone, address, postal_code, city, iban, bank_name, notes")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as OwnerRow[];
+}
+
+export async function insertOwner(o: OwnerInput): Promise<string> {
+  const created_by = await currentUserId();
+  const { data, error } = await sb.from("pm_owners").insert({
+    owner_type: o.owner_type || "private",
+    name: o.name,
+    contact_person: o.contact_person ?? null,
+    email: o.email ?? null,
+    phone: o.phone ?? null,
+    address: o.address ?? null,
+    postal_code: o.postal_code ?? null,
+    city: o.city ?? null,
+    country: "Schweiz",
+    iban: o.iban ?? null,
+    bank_name: o.bank_name ?? null,
+    notes: o.notes ?? null,
+    created_by,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function updateOwner(id: string, o: OwnerInput): Promise<void> {
+  const { error } = await sb.from("pm_owners").update({
+    owner_type: o.owner_type || "private",
+    name: o.name,
+    contact_person: o.contact_person ?? null,
+    email: o.email ?? null,
+    phone: o.phone ?? null,
+    address: o.address ?? null,
+    postal_code: o.postal_code ?? null,
+    city: o.city ?? null,
+    iban: o.iban ?? null,
+    bank_name: o.bank_name ?? null,
+    notes: o.notes ?? null,
+  }).eq("id", id);
+  if (error) throw error;
+}
+
 export interface PropertyInput {
   name: string;
   address: string;
@@ -53,6 +126,7 @@ export interface PropertyInput {
   year_built?: number | null;
   total_units?: number | null;
   notes?: string | null;
+  owner_ref_id?: string | null;
 }
 
 export async function insertProperty(p: PropertyInput) {
@@ -69,9 +143,40 @@ export async function insertProperty(p: PropertyInput) {
     total_units: p.total_units ?? 0,
     notes: p.notes ?? null,
     owner_id,
+    owner_ref_id: p.owner_ref_id ?? null,
   }).select("id").single();
   if (error) throw error;
   return data.id as string;
+}
+
+/**
+ * Liegenschaft + Einheiten in einem Schritt anlegen ("Mieterspiegel ohne Mieter").
+ * Erst die Liegenschaft, dann alle Einheiten (Wohnungen, Parkplätze, Keller …).
+ * Keller/Parkplätze können per `parentRef` (Zeilenindex einer Wohnung in derselben
+ * Liste) an eine Wohnung gekoppelt werden.
+ */
+export async function insertPropertyWithUnits(
+  p: PropertyInput,
+  units: Array<UnitInput & { parentRef?: number | null }>,
+): Promise<{ propertyId: string; unitCount: number }> {
+  const propertyId = await insertProperty({ ...p, total_units: units.length || p.total_units || 0 });
+  if (!units.length) return { propertyId, unitCount: 0 };
+
+  // Phase 1: Wohnungen/Einheiten ohne Kopplung einfügen und IDs je Zeilenindex merken
+  const idByIndex: (string | null)[] = new Array(units.length).fill(null);
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    const id = await insertUnit({ ...u, property_id: propertyId, parent_unit_id: null });
+    idByIndex[i] = id;
+  }
+  // Phase 2: Kopplungen nachtragen (Keller/Parkplatz -> Wohnung)
+  for (let i = 0; i < units.length; i++) {
+    const ref = units[i].parentRef;
+    if (ref != null && ref >= 0 && idByIndex[ref]) {
+      await sb.from("pm_units").update({ parent_unit_id: idByIndex[ref] }).eq("id", idByIndex[i]);
+    }
+  }
+  return { propertyId, unitCount: units.length };
 }
 
 export async function insertProperties(rows: PropertyInput[]) {

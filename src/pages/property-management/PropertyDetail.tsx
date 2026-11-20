@@ -63,7 +63,7 @@ const PropertyDetail = () => {
     enabled: !!propertyId,
     queryFn: async () => {
       const { data } = await sb.from("pm_properties")
-        .select("id, name, address, postal_code, city, canton, property_type")
+        .select("id, name, address, postal_code, city, canton, property_type, owner_ref_id, pm_owners:owner_ref_id(id, name, owner_type, email, phone)")
         .eq("id", propertyId).single();
       return data;
     },
@@ -152,6 +152,13 @@ const PropertyDetail = () => {
           <p className="text-sm text-muted-foreground mt-2">
             {unitList.length} Objekte · {flatCount} Wohn-/Gewerbeeinheiten · {occupied} vermietet
           </p>
+          {property?.pm_owners && (
+            <p className="text-sm mt-1">
+              <span className="text-muted-foreground">Eigentümer: </span>
+              <span className="font-medium">{property.pm_owners.name}</span>
+              {property.pm_owners.email && <span className="text-muted-foreground"> · {property.pm_owners.email}</span>}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
