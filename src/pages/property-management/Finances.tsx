@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   CreditCard, DollarSign, AlertCircle, Clock, Loader2, Check, Building2,
-  Landmark, BellRing, ChevronDown, RefreshCw, Gavel, FileWarning,
+  Landmark, BellRing, ChevronDown, RefreshCw, Gavel, FileWarning, FileCode2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,7 @@ import {
   BANK_ACCESS_LABEL,
 } from "@/lib/pmData";
 import BankConnectionDialog from "@/components/property-management/BankConnectionDialog";
+import CamtImportDialog from "@/components/property-management/CamtImportDialog";
 
 const sb = supabase as any;
 
@@ -56,6 +57,8 @@ const Finances = () => {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState<string | null>(null);
   const [bankProp, setBankProp] = useState<{ id: string; name: string } | null>(null);
+  const [camtOpen, setCamtOpen] = useState(false);
+  const [camtPropId, setCamtPropId] = useState<string | null>(null);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["pm-finances"] });
@@ -367,11 +370,18 @@ const Finances = () => {
         <TabsContent value="bank">
           <Card>
             <CardHeader>
-              <CardTitle>Bankanbindung je Liegenschaft</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Kontodaten und Zugang für den automatischen Zahlungsabgleich (camt.053 / EBICS).
-                Status „Zugang beantragt", bis die Bank freischaltet.
-              </p>
+              <div className="flex items-start justify-between flex-wrap gap-3">
+                <div>
+                  <CardTitle>Bankanbindung je Liegenschaft</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Kontodaten und Zugang für den automatischen Zahlungsabgleich (camt.053 / EBICS).
+                    Status „Zugang beantragt", bis die Bank freischaltet.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => { setCamtPropId(null); setCamtOpen(true); }}>
+                  <FileCode2 className="w-4 h-4 mr-2" /> Kontoauszug importieren
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {!bank ? (
@@ -403,6 +413,9 @@ const Finances = () => {
                           }`}>
                             {BANK_ACCESS_LABEL[st] ?? st}
                           </span>
+                          <Button size="sm" variant="ghost" onClick={() => { setCamtPropId(b.id); setCamtOpen(true); }} title="Kontoauszug importieren">
+                            <FileCode2 className="w-4 h-4" />
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => setBankProp({ id: b.id, name: b.name })}>
                             {c ? "Bearbeiten" : "Einrichten"}
                           </Button>
@@ -426,6 +439,13 @@ const Finances = () => {
           onSaved={invalidateAll}
         />
       )}
+
+      <CamtImportDialog
+        open={camtOpen}
+        onOpenChange={setCamtOpen}
+        defaultPropertyId={camtPropId}
+        onDone={invalidateAll}
+      />
     </PropertyManagementLayout>
   );
 };

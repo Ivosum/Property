@@ -1,10 +1,88 @@
+import { useEffect, useState } from "react";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Users, Bell, Shield } from "lucide-react";
+import { Building2, Users, Bell, Shield, BellRing, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { getReminderSettings, saveReminderSettings } from "@/lib/pmData";
+
+interface ReminderSettings {
+  fee_stage_1: number; fee_stage_2: number; fee_stage_3: number; fee_stage_4: number;
+  days_until_overdue: number; days_between_stages: number; grace_days_terminate: number;
+}
+
+const DunningSettings = () => {
+  const [s, setS] = useState<ReminderSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getReminderSettings().then((d) => setS({
+      fee_stage_1: Number(d.fee_stage_1), fee_stage_2: Number(d.fee_stage_2),
+      fee_stage_3: Number(d.fee_stage_3), fee_stage_4: Number(d.fee_stage_4),
+      days_until_overdue: Number(d.days_until_overdue),
+      days_between_stages: Number(d.days_between_stages),
+      grace_days_terminate: Number(d.grace_days_terminate),
+    }));
+  }, []);
+
+  const set = (k: keyof ReminderSettings, v: string) =>
+    setS((p) => p ? { ...p, [k]: Number(v) || 0 } : p);
+
+  const save = async () => {
+    if (!s) return;
+    setSaving(true);
+    try {
+      await saveReminderSettings(s as unknown as Record<string, number>);
+      toast.success("Mahnwesen-Einstellungen gespeichert");
+    } catch (e) {
+      toast.error("Konnte nicht gespeichert werden. " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BellRing className="w-5 h-5" /> Mahnwesen
+        </CardTitle>
+        <CardDescription>Gebühren und Fristen für Zahlungserinnerungen und Mahnungen</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!s ? (
+          <div className="flex items-center py-6 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Lädt...</div>
+        ) : (
+          <>
+            <div>
+              <p className="text-sm font-medium mb-2">Mahngebühren (CHF)</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="space-y-1"><Label className="text-xs">1. Erinnerung</Label><Input type="number" value={s.fee_stage_1} onChange={(e) => set("fee_stage_1", e.target.value)} /></div>
+                <div className="space-y-1"><Label className="text-xs">2. Erinnerung</Label><Input type="number" value={s.fee_stage_2} onChange={(e) => set("fee_stage_2", e.target.value)} /></div>
+                <div className="space-y-1"><Label className="text-xs">Mahnung</Label><Input type="number" value={s.fee_stage_3} onChange={(e) => set("fee_stage_3", e.target.value)} /></div>
+                <div className="space-y-1"><Label className="text-xs">Betreibung</Label><Input type="number" value={s.fee_stage_4} onChange={(e) => set("fee_stage_4", e.target.value)} /></div>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium mb-2">Fristen (Tage)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1"><Label className="text-xs">Fällig → überfällig</Label><Input type="number" value={s.days_until_overdue} onChange={(e) => set("days_until_overdue", e.target.value)} /></div>
+                <div className="space-y-1"><Label className="text-xs">Frist zwischen Stufen</Label><Input type="number" value={s.days_between_stages} onChange={(e) => set("days_between_stages", e.target.value)} /></div>
+                <div className="space-y-1"><Label className="text-xs">Frist Kündigung (Art. 257d OR)</Label><Input type="number" value={s.grace_days_terminate} onChange={(e) => set("grace_days_terminate", e.target.value)} /></div>
+              </div>
+            </div>
+            <Button onClick={save} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Speichern
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 const Settings = () => {
   return (
@@ -110,6 +188,9 @@ const Settings = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Mahnwesen */}
+        <DunningSettings />
 
         {/* Security */}
         <Card>

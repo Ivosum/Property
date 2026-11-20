@@ -682,3 +682,135 @@ export async function getReminders(paymentId: string) {
   const { data } = await sb.from("pm_reminders").select("*").eq("payment_id", paymentId).order("stage");
   return (data ?? []) as any[];
 }
+
+// =====================================================================
+// camt-Import: Kontoauszug abgleichen und offene Zahlungen verbuchen
+// =====================================================================
+import { parseCamt, normalizeRef, type CamtStatement } from "@/lib/camt";
+
+export interface CamtMatchResult {
+  statementId: string | null;
+  total: number;       // Gutschriften im Auszug
+  matched: number;     // automatisch zugeordnet + verbucht
+  unmatched: number;
+  details: {
+    amount: number;
+    date: string | null;
+    reference: string | null;
+    debtor: string | null;
+    status: "matched" | "unmatched";
+    paymentId?: string;
+    tenant?: string;
+  }[];
+}
+
+/**
+ * Importiert einen camt.053/054-Auszug für eine Liegenschaft, gleicht die
+ * Gutschriften gegen offene (pending/overdue) Zahlungen dieser Liegenschaft ab
+ * und markiert Treffer als bezahlt (löst die Auto-Buchung aus).
+ *
+ * Match-Strategie:
+ *   1) QR-/ESR-Referenz (exakt, nur Ziffern)
+ *   2) Fallback: exakter Betrag unter den offenen Zahlungen der Liegenschaft
+ *      (nur wenn eindeutig genau eine passt)
+ */
+export async function importCamtForProperty(propertyId: string, xmlText: string, fileName?: string): Promise<CamtMatchResult> {
+  const stmt: CamtStatement = parseCamt(xmlText);
+  const credits = stmt.entries.filter((e) => e.creditDebit === "CRDT");
+
+  // offene Zahlungen dieser Liegenschaft laden (über Vertrag -> Einheit -> Liegenschaft)
+  const [{ data: units }, { data: contracts }, { data: tenants }] = await Promise.all([
+    sb.from("pm_units").select("id, property_id").eq("property_id", propertyId),
+    sb.from("pm_contracts").select("id, unit_id"),
+    sb.from("pm_tenants").select("id, first_name, last_name"),
+  ]);
+  const unitIds = new Set((units ?? []).map((u: any) => u.id));
+  const contractIds = new Set((contracts ?? []).filter((c: any) => unitIds.has(c.unit_id)).map((c: any) => c.id));
+  const tenantName = new Map((tenants ?? []).map((t: any) => [t.id, [t.first_name, t.last_name].filter(Boolean).join(" ") || "Unbenannt"]));
+
+  const { data: openPays } = await sb.from("pm_payments")
+    .select("id, tenant_id, contract_id, amount, reference, status")
+    .in("status", ["pending", "overdue"]);
+  const open = (openPays ?? []).filter((p: any) => contractIds.has(p.contract_id));
+
+  // Index: Referenz -> Zahlung
+  const byRef = new Map<string, any>();
+  open.forEach((p: any) => { const r = normalizeRef(p.reference); if (r) byRef.set(r, p); });
+
+  // Statement-Datensatz anlegen
+  let statementId: string | null = null;
+  try {
+    const { data: s } = await sb.from("pm_bank_statements").insert({
+      property_id: propertyId,
+      file_name: fileName ?? null,
+      format: stmt.format,
+      period_from: stmt.periodFrom,
+      period_to: stmt.periodTo,
+      entries_total: credits.length,
+      amount_total: credits.reduce((s: number, e) => s + e.amount, 0),
+      raw_meta: { iban: stmt.iban, currency: stmt.currency },
+    }).select("id").single();
+    statementId = s?.id ?? null;
+  } catch { /* best effort */ }
+
+  const used = new Set<string>();
+  const details: CamtMatchResult["details"] = [];
+  let matched = 0;
+
+  for (const e of credits) {
+    let pay: any = null;
+    const ref = normalizeRef(e.reference);
+    if (ref && byRef.has(ref) && !used.has(byRef.get(ref).id)) {
+      pay = byRef.get(ref);
+    }
+    // Fallback: eindeutiger Betrag
+    if (!pay) {
+      const cands = open.filter((p: any) => !used.has(p.id) && Math.abs(Number(p.amount) - e.amount) < 0.01);
+      if (cands.length === 1) pay = cands[0];
+    }
+
+    if (pay) {
+      used.add(pay.id);
+      matched++;
+      try {
+        await markPaymentPaid(pay.id, e.bookingDate ?? undefined);
+      } catch { /* Verbuchung best effort */ }
+      // Bank-Entry protokollieren
+      if (statementId) {
+        try {
+          await sb.from("pm_bank_entries").insert({
+            statement_id: statementId, property_id: propertyId,
+            booking_date: e.bookingDate, value_date: e.valueDate,
+            amount: e.amount, currency: e.currency, reference: e.reference,
+            debtor_name: e.debtorName, debtor_iban: e.debtorIban, remittance_info: e.remittanceInfo,
+            matched_payment_id: pay.id, match_status: "matched",
+          });
+        } catch { /* ignore */ }
+      }
+      details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "matched", paymentId: pay.id, tenant: tenantName.get(pay.tenant_id) });
+    } else {
+      if (statementId) {
+        try {
+          await sb.from("pm_bank_entries").insert({
+            statement_id: statementId, property_id: propertyId,
+            booking_date: e.bookingDate, value_date: e.valueDate,
+            amount: e.amount, currency: e.currency, reference: e.reference,
+            debtor_name: e.debtorName, debtor_iban: e.debtorIban, remittance_info: e.remittanceInfo,
+            match_status: "unmatched",
+          });
+        } catch { /* ignore */ }
+      }
+      details.push({ amount: e.amount, date: e.bookingDate, reference: e.reference, debtor: e.debtorName, status: "unmatched" });
+    }
+  }
+
+  // Zähler + last_import am Statement/Connection aktualisieren
+  if (statementId) {
+    try { await sb.from("pm_bank_statements").update({ entries_matched: matched }).eq("id", statementId); } catch { /* ignore */ }
+  }
+  try {
+    await sb.from("pm_bank_connections").update({ last_import_at: new Date().toISOString() }).eq("property_id", propertyId);
+  } catch { /* ignore */ }
+
+  return { statementId, total: credits.length, matched, unmatched: credits.length - matched, details };
+}
