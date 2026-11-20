@@ -19,6 +19,7 @@ import {
 } from "@/lib/pmData";
 import BankConnectionDialog from "@/components/property-management/BankConnectionDialog";
 import CamtImportDialog from "@/components/property-management/CamtImportDialog";
+import { fillMahnung } from "@/lib/fillMahnung";
 
 const sb = supabase as any;
 
@@ -151,8 +152,19 @@ const Finances = () => {
   const sendReminder = async (id: string, stage: number) => {
     setReminderBusy(id);
     try {
-      await addReminder(id, stage);
-      toast.success(`${REMINDER_STAGE_LABEL[stage]} erfasst`);
+      const reminderId = await addReminder(id, stage);
+      // PDF erzeugen und herunterladen
+      try {
+        const { blob, fileName, stored } = await fillMahnung(reminderId);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = fileName; a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`${REMINDER_STAGE_LABEL[stage]} erstellt${stored ? " und abgelegt" : ""} – PDF heruntergeladen`);
+      } catch (pdfErr) {
+        toast.success(`${REMINDER_STAGE_LABEL[stage]} erfasst`);
+        toast.error("PDF konnte nicht erzeugt werden. " + (pdfErr instanceof Error ? pdfErr.message : ""));
+      }
       invalidateAll();
     } catch (e) {
       toast.error("Konnte nicht erfasst werden. " + (e instanceof Error ? e.message : ""));
