@@ -923,3 +923,128 @@ async function makeSuggestion(
     });
   } catch { /* Vorschlag ist best effort */ }
 }
+
+// =====================================================================
+// Inserierung: Inserate anlegen und auf Portalen veröffentlichen
+// =====================================================================
+export const OBJECT_TYPES = [
+  { value: "wohnung", label: "Wohnung" },
+  { value: "haus", label: "Haus" },
+  { value: "gewerbe", label: "Gewerbe" },
+  { value: "parkplatz", label: "Parkplatz" },
+];
+
+export const LISTING_FEATURES = [
+  "Balkon", "Terrasse", "Lift", "Einbauküche", "Geschirrspüler", "Parkplatz",
+  "Keller", "Haustiere erlaubt", "Neubau", "Renoviert", "Garten", "Waschmaschine",
+];
+
+export const PORTALS = [
+  { value: "flatfox", label: "Flatfox" },
+  { value: "homegate", label: "Homegate" },
+];
+
+export interface ListingInput {
+  unit_id: string;
+  property_id?: string | null;
+  title: string;
+  description?: string | null;
+  rent_display: number;
+  utilities?: number | null;
+  deposit?: number | null;
+  rooms?: number | null;
+  living_area?: number | null;
+  floor_label?: string | null;
+  object_type?: string;
+  available_from?: string | null;
+  address_line?: string | null;
+  postal_code?: string | null;
+  city?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  features?: string[];
+  images?: string[];
+  status?: string;
+}
+
+export async function insertListing(input: ListingInput): Promise<string> {
+  const { data: authData } = await sb.auth.getUser();
+  const { data, error } = await sb.from("pm_listings").insert({
+    ...input, status: input.status ?? "draft", created_by: authData?.user?.id ?? null,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function updateListing(id: string, patch: Partial<ListingInput>): Promise<void> {
+  const { error } = await sb.from("pm_listings").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function getListingChannels(listingId: string) {
+  const { data } = await sb.from("pm_listing_channels").select("*").eq("listing_id", listingId);
+  return (data ?? []) as any[];
+}
+
+export async function getAllListingChannels() {
+  const { data } = await sb.from("pm_listing_channels").select("*");
+  return (data ?? []) as any[];
+}
+
+// Bild in den pm-listings-Bucket laden, gibt die öffentliche URL zurück.
+export async function uploadListingImage(file: File, listingId: string): Promise<string> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `${listingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await sb.storage.from("pm-listings").upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw error;
+  const { data } = sb.storage.from("pm-listings").getPublicUrl(path);
+  return data.publicUrl as string;
+}
+
+// Auf einem Portal veröffentlichen (Edge Function). Fällt diese aus, wird der
+// Kanal als 'queued' markiert, damit der Status sichtbar bleibt.
+export async function publishToPortal(listingId: string, portal: string): Promise<{ ok: boolean; url?: string; message?: string }> {
+  // Kanal anlegen/aktualisieren
+  await sb.from("pm_listing_channels").upsert(
+    { listing_id: listingId, portal, status: "queued", error_msg: null },
+    { onConflict: "listing_id,portal" },
+  );
+  try {
+    const fn = portal === "flatfox" ? "publish-flatfox" : "export-immoxml";
+    const { data, error } = await sb.functions.invoke(fn, { body: { listing_id: listingId } });
+    if (error || !data?.ok) {
+      await sb.from("pm_listing_channels").update({ status: "error", error_msg: data?.message ?? error?.message ?? "Portal nicht erreichbar" })
+        .eq("listing_id", listingId).eq("portal", portal);
+      return { ok: false, message: data?.message ?? "Portal nicht konfiguriert" };
+    }
+    await sb.from("pm_listing_channels").update({
+      status: "published", external_id: data.external_id ?? null, external_url: data.external_url ?? null,
+      last_sync_at: new Date().toISOString(), error_msg: null,
+    }).eq("listing_id", listingId).eq("portal", portal);
+    return { ok: true, url: data.external_url };
+  } catch (e) {
+    await sb.from("pm_listing_channels").update({ status: "error", error_msg: e instanceof Error ? e.message : "Fehler" })
+      .eq("listing_id", listingId).eq("portal", portal);
+    return { ok: false, message: e instanceof Error ? e.message : "Fehler" };
+  }
+}
+
+export async function pauseChannel(listingId: string, portal: string): Promise<void> {
+  await sb.from("pm_listing_channels").update({ status: "paused" }).eq("listing_id", listingId).eq("portal", portal);
+}
+
+// Portal-Zugänge (ohne Geheimnisse) für die Einstellungen.
+export async function getPortalStatus() {
+  const { data } = await sb.from("pm_portal_credentials").select("portal, active, provider_id, updated_at");
+  return (data ?? []) as any[];
+}
+
+export async function savePortalCredentials(portal: string, patch: { api_key?: string; provider_id?: string; publisher_id?: string; active?: boolean }) {
+  const clean: any = { portal, updated_at: new Date().toISOString() };
+  if (patch.api_key) clean.api_key = patch.api_key;
+  if (patch.provider_id != null) clean.provider_id = patch.provider_id;
+  if (patch.publisher_id != null) clean.publisher_id = patch.publisher_id;
+  if (patch.active != null) clean.active = patch.active;
+  const { error } = await sb.from("pm_portal_credentials").upsert(clean, { onConflict: "portal" });
+  if (error) throw error;
+}

@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Users, Bell, Shield, BellRing, Loader2 } from "lucide-react";
+import { Building2, Users, Bell, Shield, BellRing, Loader2, Globe, Check } from "lucide-react";
 import { toast } from "sonner";
-import { getReminderSettings, saveReminderSettings } from "@/lib/pmData";
+import { getReminderSettings, saveReminderSettings, getPortalStatus, savePortalCredentials } from "@/lib/pmData";
 
 interface ReminderSettings {
   fee_stage_1: number; fee_stage_2: number; fee_stage_3: number; fee_stage_4: number;
@@ -77,6 +77,85 @@ const DunningSettings = () => {
             <Button onClick={save} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Speichern
             </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const PortalSettings = () => {
+  const [status, setStatus] = useState<any[]>([]);
+  const [ff, setFf] = useState({ api_key: "", active: false });
+  const [hg, setHg] = useState({ provider_id: "", active: false });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPortalStatus().then((s) => {
+      setStatus(s);
+      const f = s.find((x) => x.portal === "flatfox");
+      const h = s.find((x) => x.portal === "homegate");
+      if (f) setFf((p) => ({ ...p, active: !!f.active }));
+      if (h) setHg((p) => ({ ...p, active: !!h.active, provider_id: h.provider_id ?? "" }));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const saveFlatfox = async () => {
+    setSaving("flatfox");
+    try { await savePortalCredentials("flatfox", { ...(ff.api_key ? { api_key: ff.api_key } : {}), active: ff.active }); toast.success("Flatfox gespeichert"); }
+    catch (e) { toast.error("Fehler. " + (e instanceof Error ? e.message : "")); }
+    finally { setSaving(null); }
+  };
+  const saveHomegate = async () => {
+    setSaving("homegate");
+    try { await savePortalCredentials("homegate", { provider_id: hg.provider_id, active: hg.active }); toast.success("Homegate gespeichert"); }
+    catch (e) { toast.error("Fehler. " + (e instanceof Error ? e.message : "")); }
+    finally { setSaving(null); }
+  };
+
+  const ffActive = status.find((x) => x.portal === "flatfox")?.active;
+  const hgActive = status.find((x) => x.portal === "homegate")?.active;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Globe className="w-5 h-5" /> Portal-Anbindung</CardTitle>
+        <CardDescription>Zugänge für die direkte Veröffentlichung von Inseraten auf Homegate und Flatfox</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {loading ? (
+          <div className="flex items-center py-4 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Lädt...</div>
+        ) : (
+          <>
+            {/* Flatfox */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="font-medium">Flatfox</p>
+                {ffActive && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="w-3 h-3" /> aktiv</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">API-Key aus dem Flatfox-Konto (Einstellungen → API). Ermöglicht die direkte Veröffentlichung.</p>
+              <div className="flex gap-2">
+                <Input type="password" placeholder={ffActive ? "•••••••• (gespeichert)" : "Flatfox API-Key"} value={ff.api_key} onChange={(e) => setFf((p) => ({ ...p, api_key: e.target.value }))} />
+                <Button variant="outline" onClick={() => setFf((p) => ({ ...p, active: !p.active }))}>{ff.active ? "Aktiv" : "Inaktiv"}</Button>
+                <Button onClick={saveFlatfox} disabled={saving === "flatfox"}>{saving === "flatfox" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Speichern</Button>
+              </div>
+            </div>
+
+            {/* Homegate */}
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <p className="font-medium">Homegate / ImmoScout24</p>
+                {hgActive && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="w-3 h-3" /> aktiv</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">Anbieter-ID (SMG). Inserate werden als ImmoXML-Feed bereitgestellt, den Homegate importiert.</p>
+              <div className="flex gap-2">
+                <Input placeholder="Anbieter-ID" value={hg.provider_id} onChange={(e) => setHg((p) => ({ ...p, provider_id: e.target.value }))} />
+                <Button variant="outline" onClick={() => setHg((p) => ({ ...p, active: !p.active }))}>{hg.active ? "Aktiv" : "Inaktiv"}</Button>
+                <Button onClick={saveHomegate} disabled={saving === "homegate"}>{saving === "homegate" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Speichern</Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Die Zugangsdaten werden sicher gespeichert und nur serverseitig für die Veröffentlichung verwendet.</p>
           </>
         )}
       </CardContent>
@@ -191,6 +270,9 @@ const Settings = () => {
 
         {/* Mahnwesen */}
         <DunningSettings />
+
+        {/* Portal-Anbindung */}
+        <PortalSettings />
 
         {/* Security */}
         <Card>

@@ -4,3 +4,9 @@ verify_jwt = true
 
 [functions.import-camt]
 verify_jwt = true
+
+[functions.publish-flatfox]
+verify_jwt = true
+
+[functions.export-immoxml]
+verify_jwt = true
