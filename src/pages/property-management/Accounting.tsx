@@ -6,6 +6,7 @@ import {
 } from "@/lib/accounting";
 import { getOpenItems } from "@/lib/openItems";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
+import FeatureGate from "@/components/property-management/FeatureGate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Building2, Loader2, ChevronRight, Layers } from "lucide-react";
@@ -67,6 +68,7 @@ const Accounting = () => {
 
   return (
     <PropertyManagementLayout>
+      <FeatureGate feature="accounting">
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Buchhaltung</h1>
@@ -134,6 +136,7 @@ const Accounting = () => {
           </div>
         )}
       </div>
+      </FeatureGate>
     </PropertyManagementLayout>
   );
 };

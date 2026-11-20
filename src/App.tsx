@@ -49,6 +49,8 @@ import PMAccounting from "./pages/property-management/Accounting";
 import PMAccountingDetail from "./pages/property-management/AccountingDetail";
 import PMAccountingConsolidated from "./pages/property-management/AccountingConsolidated";
 import PMSettings from "./pages/property-management/Settings";
+import PMSubscription from "./pages/property-management/Subscription";
+import Pricing from "./pages/Pricing";
 import TenantPortal from "./pages/property-management/TenantPortal";
 
 const queryClient = new QueryClient();
@@ -63,6 +65,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/tenant-auth" element={<TenantAuth />} />
             <Route path="/pm-auth" element={<PropertyManagementAuth />} />
             
@@ -105,6 +108,7 @@ const App = () => (
             <Route path="/property-management/accounting/consolidated" element={<PMAccountingConsolidated />} />
             <Route path="/property-management/accounting/:propertyId" element={<PMAccountingDetail />} />
             <Route path="/property-management/settings" element={<PMSettings />} />
+            <Route path="/property-management/subscription" element={<PMSubscription />} />
             <Route path="/tenant-portal" element={<TenantPortal />} />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import ReceiptUpload from "@/components/property-management/ReceiptUpload";
 import { buildPropertyReport, type ReceiptLine } from "@/lib/propertyReport";
 import BookingSuggestions from "@/components/property-management/BookingSuggestions";
+import FeatureGate from "@/components/property-management/FeatureGate";
 import AccountsEditor from "@/components/property-management/AccountsEditor";
 import BankConnectionDialog from "@/components/property-management/BankConnectionDialog";
 import CamtImportDialog from "@/components/property-management/CamtImportDialog";
@@ -145,6 +146,7 @@ const AccountingDetail = () => {
 
   return (
     <PropertyManagementLayout>
+      <FeatureGate feature="accounting">
       <div className="mb-6">
         <Button variant="ghost" size="sm" onClick={() => navigate("/property-management/accounting")} className="mb-3 -ml-2">
           <ArrowLeft className="w-4 h-4 mr-1" /> Zur Übersicht
@@ -360,6 +362,7 @@ const AccountingDetail = () => {
           )}
         </DialogContent>
       </Dialog>
+      </FeatureGate>
     </PropertyManagementLayout>
   );
 };

@@ -17,13 +17,18 @@ import {
   Key,
   ClipboardCheck,
   BookOpen,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePlan } from "@/components/property-management/PlanContext";
+import { type FeatureKey } from "@/lib/plan";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
+  feature?: FeatureKey;
 }
 
 const navItems: NavItem[] = [
@@ -32,20 +37,22 @@ const navItems: NavItem[] = [
   { label: "Mieter", href: "/property-management/tenants", icon: <Users className="w-5 h-5" /> },
   { label: "Mietverträge", href: "/property-management/contracts", icon: <ClipboardList className="w-5 h-5" /> },
   { label: "Finanzen", href: "/property-management/finances", icon: <CreditCard className="w-5 h-5" /> },
-  { label: "Buchhaltung", href: "/property-management/accounting", icon: <BookOpen className="w-5 h-5" /> },
+  { label: "Buchhaltung", href: "/property-management/accounting", icon: <BookOpen className="w-5 h-5" />, feature: "accounting" },
   { label: "Mängelmeldungen", href: "/property-management/defects", icon: <AlertTriangle className="w-5 h-5" /> },
   { label: "Wohnungsabnahme", href: "/property-management/handover", icon: <ClipboardCheck className="w-5 h-5" /> },
   { label: "Dokumente", href: "/property-management/documents", icon: <FileText className="w-5 h-5" /> },
-  { label: "Nebenkostenabr.", href: "/property-management/utility-billing", icon: <Calendar className="w-5 h-5" /> },
+  { label: "Nebenkostenabr.", href: "/property-management/utility-billing", icon: <Calendar className="w-5 h-5" />, feature: "utility_billing" },
   { label: "Kommunikation", href: "/property-management/messages", icon: <Mail className="w-5 h-5" /> },
-  { label: "Inserierung", href: "/property-management/listings", icon: <Key className="w-5 h-5" /> },
+  { label: "Inserierung", href: "/property-management/listings", icon: <Key className="w-5 h-5" />, feature: "listings" },
   { label: "Berichte", href: "/property-management/reports", icon: <BarChart3 className="w-5 h-5" /> },
+  { label: "Abo & Pläne", href: "/property-management/subscription", icon: <Sparkles className="w-5 h-5" /> },
   { label: "Einstellungen", href: "/property-management/settings", icon: <Settings className="w-5 h-5" /> },
 ];
 
 const PropertyManagementSidebar = () => {
   const location = useLocation();
   const { profile, signOut } = useAuth();
+  const { can } = usePlan();
 
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col h-screen sticky top-0">
@@ -84,6 +91,7 @@ const PropertyManagementSidebar = () => {
         <ul className="space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.href;
+            const locked = item.feature ? !can(item.feature) : false;
             return (
               <li key={item.href}>
                 <Link
@@ -96,7 +104,8 @@ const PropertyManagementSidebar = () => {
                   )}
                 >
                   {item.icon}
-                  <span className="text-sm">{item.label}</span>
+                  <span className="text-sm flex-1">{item.label}</span>
+                  {locked && <Lock className="w-3.5 h-3.5 opacity-50" aria-label="Im höheren Plan" />}
                 </Link>
               </li>
             );

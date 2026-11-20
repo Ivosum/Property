@@ -6,6 +6,7 @@ import {
 } from "@/lib/utilityBilling";
 import { buildUtilityBillPdf } from "@/lib/utilityBillPdf";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
+import FeatureGate from "@/components/property-management/FeatureGate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ const UtilityBilling = () => {
 
   return (
     <PropertyManagementLayout>
+      <FeatureGate feature="utility_billing">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold">Nebenkostenabrechnung</h1>
@@ -115,6 +117,7 @@ const UtilityBilling = () => {
       {detailBill && (
         <BillingDetailDialog billId={detailBill} onClose={() => setDetailBill(null)} />
       )}
+      </FeatureGate>
     </PropertyManagementLayout>
   );
 };

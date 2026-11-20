@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ListingDialog from "@/components/property-management/ListingDialog";
+import FeatureGate from "@/components/property-management/FeatureGate";
 import {
   getAllListingChannels, publishToPortal, pauseChannel, PORTALS,
 } from "@/lib/pmData";
@@ -72,6 +73,7 @@ const Listings = () => {
 
   return (
     <PropertyManagementLayout>
+      <FeatureGate feature="listings">
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Inserierung</h1>
@@ -194,6 +196,7 @@ const Listings = () => {
       )}
 
       <ListingDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refresh} />
+      </FeatureGate>
     </PropertyManagementLayout>
   );
 };
