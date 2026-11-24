@@ -1,9 +1,17 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Loader2, Mail, Phone, Home, FileText, CreditCard, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  ArrowLeft, Loader2, Mail, Phone, Home, FileText, CreditCard, Download,
+  Pencil, Car, Box, Settings2, Users,
+} from "lucide-react";
+import TenantEditDialog from "@/components/property-management/TenantEditDialog";
+import UnitManageDialog from "@/components/property-management/UnitManageDialog";
+import { UNIT_TYPE_LABEL } from "@/lib/pmData";
 
 const sb = supabase as any;
 
@@ -23,18 +31,21 @@ const payStatusLabel = (s: string) =>
 const TenantDetail = () => {
   const { tenantId } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [manageUnit, setManageUnit] = useState<{ propertyId: string; unitId: string; label: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["pm-tenant-360", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data: tenant } = await sb.from("pm_tenants")
-        .select("id, first_name, last_name, email, phone, nationality, employer")
+        .select("id, first_name, last_name, email, phone, nationality, employer, co_tenants")
         .eq("id", tenantId).single();
 
       const [{ data: contracts }, { data: units }, { data: props }, { data: payments }, { data: docs }] = await Promise.all([
         sb.from("pm_contracts").select("id, unit_id, base_rent, utilities_advance, start_date, end_date, status, deposit_amount").eq("tenant_id", tenantId),
-        sb.from("pm_units").select("id, unit_number, floor_label, unit_type, property_id"),
+        sb.from("pm_units").select("id, unit_number, floor_label, unit_type, property_id, parent_unit_id, base_rent"),
         sb.from("pm_properties").select("id, name"),
         sb.from("pm_payments").select("id, amount, due_date, status, payment_type").eq("tenant_id", tenantId).order("due_date", { ascending: false }),
         sb.from("pm_documents").select("id, name, document_type, file_url, created_at").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
@@ -45,8 +56,14 @@ const TenantDetail = () => {
 
       const objects = (contracts ?? []).map((c: any) => {
         const u = unitById.get(c.unit_id);
+        // gekoppelte Neben-Einheiten (Garage/Keller/…) dieser Wohnung
+        const coupled = (units ?? []).filter((x: any) => x.parent_unit_id === c.unit_id).map((x: any) => ({
+          id: x.id, number: x.unit_number, type: x.unit_type, rent: Number(x.base_rent) || 0,
+        }));
         return {
           contract_id: c.id,
+          unit_id: c.unit_id,
+          property_id: u?.property_id ?? null,
           status: c.status,
           unit: u ? [u.floor_label, u.unit_number].filter(Boolean).join(" ") : "–",
           property: u ? (propName.get(u.property_id) ?? "") : "",
@@ -55,6 +72,7 @@ const TenantDetail = () => {
           start: c.start_date,
           end: c.end_date,
           deposit: c.deposit_amount,
+          coupled,
         };
       });
 
@@ -96,7 +114,16 @@ const TenantDetail = () => {
             {t?.phone && <a href={`tel:${t.phone}`} className="flex items-center gap-1 hover:text-foreground"><Phone className="w-4 h-4" />{t.phone}</a>}
             {t?.employer && <span>{t.employer}</span>}
           </div>
+          {Array.isArray(t?.co_tenants) && t.co_tenants.length > 0 && (
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
+              <Users className="w-4 h-4" />
+              Mitmieter: {t.co_tenants.map((c: any) => [c.first_name, c.last_name].filter(Boolean).join(" ")).join(", ")}
+            </div>
+          )}
         </div>
+        <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Pencil className="w-4 h-4 mr-2" /> Bearbeiten
+        </Button>
       </div>
 
       {/* Kennzahlen */}
@@ -127,19 +154,46 @@ const TenantDetail = () => {
           ) : (
             <div className="space-y-3">
               {data!.objects.map((o, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg flex-wrap gap-2">
-                  <div>
-                    <p className="font-medium">{o.property} · {o.unit}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(o.start)} – {o.end ? formatDate(o.end) : "unbefristet"}
-                      {o.deposit ? ` · Kaution ${formatCHF(Number(o.deposit))}` : ""}
-                    </p>
+                <div key={i} className="p-3 bg-secondary/30 rounded-lg">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="font-medium">{o.property} · {o.unit}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(o.start)} – {o.end ? formatDate(o.end) : "unbefristet"}
+                        {o.deposit ? ` · Kaution ${formatCHF(Number(o.deposit))}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{formatCHF(o.rent)}{o.nk ? <span className="text-xs text-muted-foreground"> + {formatCHF(o.nk)} NK</span> : null}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${o.status === "active" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                        {o.status === "active" ? "Aktiv" : o.status === "terminated" ? "Beendet" : o.status}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatCHF(o.rent)}{o.nk ? <span className="text-xs text-muted-foreground"> + {formatCHF(o.nk)} NK</span> : null}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${o.status === "active" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                      {o.status === "active" ? "Aktiv" : o.status === "terminated" ? "Beendet" : o.status}
-                    </span>
+
+                  {/* Garage & Keller */}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {o.coupled.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">Keine Garage / Keller zugeordnet</span>
+                      ) : (
+                        o.coupled.map((c) => {
+                          const Icon = c.type === "garage" || c.type === "aussenparkplatz" ? Car : Box;
+                          return (
+                            <span key={c.id} className="inline-flex items-center gap-1 text-xs bg-background border rounded-full px-2 py-1">
+                              <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+                              {c.number}
+                              <span className="text-muted-foreground">· {UNIT_TYPE_LABEL[c.type] ?? c.type}{c.rent ? ` · ${formatCHF(c.rent)}` : ""}</span>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                    {o.property_id && (
+                      <Button variant="ghost" size="sm" onClick={() => setManageUnit({ propertyId: o.property_id!, unitId: o.unit_id, label: `${o.property} · ${o.unit}` })}>
+                        <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Garage/Keller verwalten
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -192,6 +246,25 @@ const TenantDetail = () => {
           </CardContent>
         </Card>
       </div>
+
+      {t && (
+        <TenantEditDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          tenant={t}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ["pm-tenant-360", tenantId] })}
+        />
+      )}
+      {manageUnit && (
+        <UnitManageDialog
+          open={!!manageUnit}
+          onOpenChange={(o) => { if (!o) setManageUnit(null); }}
+          propertyId={manageUnit.propertyId}
+          unitId={manageUnit.unitId}
+          unitLabel={manageUnit.label}
+          onChanged={() => queryClient.invalidateQueries({ queryKey: ["pm-tenant-360", tenantId] })}
+        />
+      )}
     </PropertyManagementLayout>
   );
 };

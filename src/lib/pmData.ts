@@ -1048,3 +1048,62 @@ export async function savePortalCredentials(portal: string, patch: { api_key?: s
   const { error } = await sb.from("pm_portal_credentials").upsert(clean, { onConflict: "portal" });
   if (error) throw error;
 }
+
+// =====================================================================
+// Mieter bearbeiten + gekoppelte Einheiten (Garage/Keller) verwalten
+// =====================================================================
+export async function updateTenant(tenantId: string, patch: {
+  first_name?: string; last_name?: string; email?: string | null; phone?: string | null;
+  nationality?: string | null; employer?: string | null; notes?: string | null;
+  co_tenants?: CoTenant[];
+}): Promise<void> {
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) if (v !== undefined) clean[k] = v;
+  const { error } = await sb.from("pm_tenants").update(clean).eq("id", tenantId);
+  if (error) throw error;
+}
+
+// Alle Einheiten einer Liegenschaft, inkl. welche an welche Wohnung gekoppelt sind.
+export async function getPropertyUnits(propertyId: string) {
+  const { data } = await sb.from("pm_units")
+    .select("id, unit_number, unit_type, floor_label, base_rent, utilities_advance, parent_unit_id, status, property_id")
+    .eq("property_id", propertyId)
+    .order("unit_type");
+  return (data ?? []) as any[];
+}
+
+// Eine Nebeneinheit (Garage/Keller/…) an eine Wohnung koppeln oder lösen.
+export async function setUnitParent(unitId: string, parentUnitId: string | null): Promise<void> {
+  const { error } = await sb.from("pm_units").update({ parent_unit_id: parentUnitId }).eq("id", unitId);
+  if (error) throw error;
+}
+
+// Einheit-Stammdaten ändern (Nummer, Typ, Stockwerk, Miete, Status).
+export async function updateUnit(unitId: string, patch: {
+  unit_number?: string; unit_type?: string; floor_label?: string | null;
+  base_rent?: number; utilities_advance?: number; status?: string; rooms?: number | null; living_area_sqm?: number | null;
+}): Promise<void> {
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) if (v !== undefined) clean[k] = v;
+  const { error } = await sb.from("pm_units").update(clean).eq("id", unitId);
+  if (error) throw error;
+}
+
+// Neue Nebeneinheit anlegen und direkt an eine Wohnung koppeln.
+export async function addCoupledUnit(params: {
+  property_id: string; unit_number: string; unit_type: string; floor_label?: string;
+  base_rent?: number; parent_unit_id: string;
+}): Promise<string> {
+  const { data, error } = await sb.from("pm_units").insert({
+    property_id: params.property_id, unit_number: params.unit_number, unit_type: params.unit_type,
+    floor_label: params.floor_label ?? "UG", base_rent: params.base_rent ?? 0,
+    status: "occupied", parent_unit_id: params.parent_unit_id,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function deleteUnit(unitId: string): Promise<void> {
+  const { error } = await sb.from("pm_units").delete().eq("id", unitId);
+  if (error) throw error;
+}
