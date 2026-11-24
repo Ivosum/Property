@@ -1107,3 +1107,18 @@ export async function deleteUnit(unitId: string): Promise<void> {
   const { error } = await sb.from("pm_units").delete().eq("id", unitId);
   if (error) throw error;
 }
+
+// Ein ganzes Stockwerk umbenennen: alle Einheiten einer Liegenschaft mit
+// dem alten Stockwerk-Label auf ein neues Label setzen. Gibt die Anzahl
+// der aktualisierten Einheiten zurück. Für "Ohne Stockwerk" ist from = null.
+export async function renameFloor(
+  propertyId: string,
+  fromLabel: string | null,
+  toLabel: string | null,
+): Promise<number> {
+  let q = sb.from("pm_units").update({ floor_label: toLabel }).eq("property_id", propertyId);
+  q = fromLabel === null ? q.is("floor_label", null) : q.eq("floor_label", fromLabel);
+  const { data, error } = await q.select("id");
+  if (error) throw error;
+  return (data as unknown[] | null)?.length ?? 0;
+}
