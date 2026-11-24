@@ -317,12 +317,13 @@ export interface UnitRow {
   utilities_advance: number;
   parent_unit_id: string | null;
   status: string;
+  signup_token?: string | null;
 }
 
 export async function getUnits(propertyId: string): Promise<UnitRow[]> {
   const { data, error } = await sb
     .from("pm_units")
-    .select("id, property_id, unit_number, unit_type, floor_label, floor, rooms, living_area_sqm, base_rent, utilities_advance, parent_unit_id, status")
+    .select("id, property_id, unit_number, unit_type, floor_label, floor, rooms, living_area_sqm, base_rent, utilities_advance, parent_unit_id, status, signup_token")
     .eq("property_id", propertyId);
   if (error) throw error;
   return (data ?? []) as UnitRow[];
@@ -1165,4 +1166,61 @@ export async function inviteTenantPortal(tenantId: string): Promise<{
   // Einladungszeitpunkt markieren (für Statusanzeige)
   await sb.from("pm_tenants").update({ portal_invited_at: new Date().toISOString() }).eq("id", tenantId);
   return data as { ok: boolean; mode: string; email: string };
+}
+
+// ── Mieterportal: Beitrittsanfragen (Verwaltung) ────────────────────────────
+export interface PortalRequest {
+  id: string;
+  unit_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+  unit_label?: string;
+  property_name?: string;
+}
+
+// Lädt Beitrittsanfragen (default: nur offene) inkl. Liegenschaft/Einheit.
+export async function getPortalRequests(status: string | null = "pending"): Promise<PortalRequest[]> {
+  let q = sb.from("pm_portal_requests")
+    .select("id, unit_id, first_name, last_name, email, phone, message, status, created_at")
+    .order("created_at", { ascending: false });
+  if (status) q = q.eq("status", status);
+  const { data: reqs, error } = await q;
+  if (error) throw error;
+  const rows = (reqs ?? []) as PortalRequest[];
+  if (rows.length === 0) return rows;
+
+  const unitIds = [...new Set(rows.map((r) => r.unit_id))];
+  const { data: units } = await sb.from("pm_units")
+    .select("id, unit_number, floor_label, property_id").in("id", unitIds);
+  const propIds = [...new Set((units ?? []).map((u: any) => u.property_id))];
+  const { data: props } = await sb.from("pm_properties").select("id, name").in("id", propIds);
+  const propName = new Map((props ?? []).map((p: any) => [p.id, p.name]));
+  const unitMap = new Map((units ?? []).map((u: any) => [u.id, u]));
+
+  return rows.map((r) => {
+    const u = unitMap.get(r.unit_id);
+    return {
+      ...r,
+      unit_label: u ? [u.floor_label, u.unit_number].filter(Boolean).join(" ") : "–",
+      property_name: u ? (propName.get(u.property_id) ?? "") : "",
+    };
+  });
+}
+
+// Bestätigt oder lehnt eine Anfrage ab (Edge Function approve-portal-request).
+export async function decidePortalRequest(requestId: string, action: "approve" | "reject"): Promise<void> {
+  const { data, error } = await sb.functions.invoke("approve-portal-request", {
+    body: { request_id: requestId, action },
+  });
+  if (error) {
+    let msg = error.message || "Aktion fehlgeschlagen";
+    try { const ctx = (error as any).context; if (ctx?.body) { const b = JSON.parse(ctx.body); if (b?.error) msg = b.error; } } catch { /* */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
 }

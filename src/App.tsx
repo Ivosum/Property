@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import TenantAuth from "./pages/TenantAuth";
+import TenantSignup from "./pages/TenantSignup";
 import PropertyManagementAuth from "./pages/PropertyManagementAuth";
 
 // Off-Market Routes
@@ -35,6 +36,7 @@ import PMProperties from "./pages/property-management/Properties";
 import PMPropertyDetail from "./pages/property-management/PropertyDetail";
 import PMTenants from "./pages/property-management/Tenants";
 import PMTenantDetail from "./pages/property-management/TenantDetail";
+import PMPortalRequests from "./pages/property-management/PortalRequests";
 import PMContracts from "./pages/property-management/Contracts";
 import PMFinances from "./pages/property-management/Finances";
 import PMDefects from "./pages/property-management/Defects";
@@ -67,6 +69,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/tenant-auth" element={<TenantAuth />} />
+            <Route path="/mieter-anmeldung" element={<TenantSignup />} />
             <Route path="/pm-auth" element={<PropertyManagementAuth />} />
             
             {/* Off-Market Platform Routes */}
@@ -94,6 +97,7 @@ const App = () => (
             <Route path="/property-management/properties/:propertyId" element={<PMPropertyDetail />} />
             <Route path="/property-management/tenants" element={<PMTenants />} />
             <Route path="/property-management/tenants/:tenantId" element={<PMTenantDetail />} />
+            <Route path="/property-management/portal-requests" element={<PMPortalRequests />} />
             <Route path="/property-management/contracts" element={<PMContracts />} />
             <Route path="/property-management/finances" element={<PMFinances />} />
             <Route path="/property-management/defects" element={<PMDefects />} />

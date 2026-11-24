@@ -6,6 +6,7 @@ import { getUnits, UNIT_TYPE_LABEL, FLOOR_LABELS, type UnitRow } from "@/lib/pmD
 import PropertyManagementLayout from "@/components/property-management/PropertyManagementLayout";
 import UnitDialog from "@/components/property-management/UnitDialog";
 import FloorRenameDialog from "@/components/property-management/FloorRenameDialog";
+import UnitQrDialog from "@/components/property-management/UnitQrDialog";
 import ImportDialog from "@/components/property-management/ImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { insertUnits } from "@/lib/pmData";
 import { downloadTemplate, normalizeUnitType } from "@/lib/importMapping";
-import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown, Pencil, QrCode } from "lucide-react";
 
 const sb = supabase as any;
 
@@ -58,6 +59,7 @@ const PropertyDetail = () => {
   const [unitOpen, setUnitOpen] = useState(false);
   const [editUnit, setEditUnit] = useState<UnitRow | null>(null);
   const [renameFloorState, setRenameFloorState] = useState<{ label: string | null; count: number } | null>(null);
+  const [qrUnit, setQrUnit] = useState<{ token: string | null; label: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [tab, setTab] = useState<"einheiten" | "mieter" | "buchhaltung" | "dokumente">("einheiten");
 
@@ -334,6 +336,13 @@ const PropertyDetail = () => {
                               <span className={`text-xs px-2 py-1 rounded-full ${statusBadge(u.status)}`}>
                                 {statusLabel(u.status)}
                               </span>
+                              {(u.unit_type === "wohnung" || u.unit_type === "gewerbe") && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="QR-Code für Mieter-Anmeldung"
+                                  onClick={(e) => { e.stopPropagation(); setQrUnit({ token: (u as any).signup_token ?? null, label: [u.floor_label, u.unit_number].filter(Boolean).join(" ") }); }}>
+                                  <QrCode className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                                 title="Bearbeiten"
                                 onClick={(e) => { e.stopPropagation(); setEditUnit(u); }}>
@@ -372,6 +381,8 @@ const PropertyDetail = () => {
       <FloorRenameDialog open={!!renameFloorState} onOpenChange={(o) => { if (!o) setRenameFloorState(null); }}
         propertyId={propertyId!} currentLabel={renameFloorState?.label ?? null}
         unitCount={renameFloorState?.count ?? 0} onSaved={refresh} />
+      <UnitQrDialog open={!!qrUnit} onOpenChange={(o) => { if (!o) setQrUnit(null); }}
+        token={qrUnit?.token ?? null} unitLabel={qrUnit?.label ?? ""} propertyName={property?.name ?? "Liegenschaft"} />
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}

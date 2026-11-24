@@ -13,3 +13,9 @@ verify_jwt = true
 
 [functions.invite-tenant]
 verify_jwt = true
+
+[functions.tenant-signup]
+verify_jwt = false
+
+[functions.approve-portal-request]
+verify_jwt = true

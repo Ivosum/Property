@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/property-management", icon: <Home className="w-5 h-5" /> },
   { label: "Liegenschaften", href: "/property-management/properties", icon: <Building2 className="w-5 h-5" /> },
   { label: "Mieter", href: "/property-management/tenants", icon: <Users className="w-5 h-5" /> },
+  { label: "Portal-Anfragen", href: "/property-management/portal-requests", icon: <Key className="w-5 h-5" /> },
   { label: "Mietverträge", href: "/property-management/contracts", icon: <ClipboardList className="w-5 h-5" /> },
   { label: "Finanzen", href: "/property-management/finances", icon: <CreditCard className="w-5 h-5" /> },
   { label: "Buchhaltung", href: "/property-management/accounting", icon: <BookOpen className="w-5 h-5" />, feature: "accounting" },
