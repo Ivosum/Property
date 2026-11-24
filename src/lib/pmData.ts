@@ -1296,3 +1296,11 @@ export async function getTenantIdSignedUrl(path: string): Promise<string | null>
   const { data } = await sb.storage.from("tenant-ids").createSignedUrl(path, 600);
   return data?.signedUrl ?? null;
 }
+
+// Hauswart/Abwart einer Liegenschaft speichern.
+export async function updatePropertyCaretaker(propertyId: string, data: {
+  caretaker_name?: string | null; caretaker_phone?: string | null; caretaker_email?: string | null;
+}): Promise<void> {
+  const { error } = await sb.from("pm_properties").update(data).eq("id", propertyId);
+  if (error) throw error;
+}

@@ -7,6 +7,7 @@ import PropertyManagementLayout from "@/components/property-management/PropertyM
 import UnitDialog from "@/components/property-management/UnitDialog";
 import FloorRenameDialog from "@/components/property-management/FloorRenameDialog";
 import UnitQrDialog from "@/components/property-management/UnitQrDialog";
+import CaretakerDialog from "@/components/property-management/CaretakerDialog";
 import ImportDialog from "@/components/property-management/ImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { insertUnits } from "@/lib/pmData";
 import { downloadTemplate, normalizeUnitType } from "@/lib/importMapping";
-import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown, Pencil, QrCode } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown, Pencil, QrCode, Wrench } from "lucide-react";
 
 const sb = supabase as any;
 
@@ -60,6 +61,7 @@ const PropertyDetail = () => {
   const [editUnit, setEditUnit] = useState<UnitRow | null>(null);
   const [renameFloorState, setRenameFloorState] = useState<{ label: string | null; count: number } | null>(null);
   const [qrUnit, setQrUnit] = useState<{ token: string | null; label: string } | null>(null);
+  const [caretakerOpen, setCaretakerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [tab, setTab] = useState<"einheiten" | "mieter" | "buchhaltung" | "dokumente">("einheiten");
 
@@ -68,7 +70,7 @@ const PropertyDetail = () => {
     enabled: !!propertyId,
     queryFn: async () => {
       const { data } = await sb.from("pm_properties")
-        .select("id, name, address, postal_code, city, canton, property_type, owner_ref_id, pm_owners:owner_ref_id(id, name, owner_type, email, phone)")
+        .select("id, name, address, postal_code, city, canton, property_type, owner_ref_id, caretaker_name, caretaker_phone, caretaker_email, pm_owners:owner_ref_id(id, name, owner_type, email, phone)")
         .eq("id", propertyId).single();
       return data;
     },
@@ -164,6 +166,21 @@ const PropertyDetail = () => {
               {property.pm_owners.email && <span className="text-muted-foreground"> · {property.pm_owners.email}</span>}
             </p>
           )}
+          <p className="text-sm mt-1 flex items-center gap-1.5">
+            <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Hauswart: </span>
+            {property?.caretaker_name || property?.caretaker_phone ? (
+              <span className="font-medium">
+                {property?.caretaker_name}
+                {property?.caretaker_phone && <span className="text-muted-foreground font-normal"> · {property.caretaker_phone}</span>}
+              </span>
+            ) : (
+              <span className="text-muted-foreground italic">nicht hinterlegt</span>
+            )}
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCaretakerOpen(true)}>
+              <Pencil className="w-3 h-3 mr-1" /> {property?.caretaker_name ? "Ändern" : "Hinzufügen"}
+            </Button>
+          </p>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
@@ -383,6 +400,9 @@ const PropertyDetail = () => {
         unitCount={renameFloorState?.count ?? 0} onSaved={refresh} />
       <UnitQrDialog open={!!qrUnit} onOpenChange={(o) => { if (!o) setQrUnit(null); }}
         token={qrUnit?.token ?? null} unitLabel={qrUnit?.label ?? ""} propertyName={property?.name ?? "Liegenschaft"} />
+      <CaretakerDialog open={caretakerOpen} onOpenChange={setCaretakerOpen} propertyId={propertyId!}
+        current={{ caretaker_name: property?.caretaker_name, caretaker_phone: property?.caretaker_phone, caretaker_email: property?.caretaker_email }}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ["pm-property", propertyId] })} />
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}

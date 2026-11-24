@@ -11,7 +11,8 @@ import {
   Send,
   Phone,
   Mail,
-  LogOut
+  LogOut,
+  Wrench
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,6 +38,9 @@ interface ContractData {
     property: {
       name: string;
       address: string;
+      caretaker_name?: string | null;
+      caretaker_phone?: string | null;
+      caretaker_email?: string | null;
     };
   };
 }
@@ -143,7 +147,7 @@ const TenantPortal = () => {
       if (unitData) {
         const { data: propertyData } = await supabase
           .from("pm_properties")
-          .select("name, address")
+          .select("name, address, caretaker_name, caretaker_phone, caretaker_email")
           .eq("id", unitData.property_id)
           .maybeSingle();
 
@@ -413,25 +417,59 @@ const TenantPortal = () => {
                   {org?.org_name ? `${org.org_name} – bei Fragen erreichen Sie uns hier` : "Bei Fragen erreichen Sie uns hier"}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {org?.contact_phone && (
-                  <a href={`tel:${org.contact_phone.replace(/\s+/g, "")}`}>
-                    <Button variant="outline" className="w-full justify-start gap-2">
-                      <Phone className="w-4 h-4" />
-                      {org.contact_phone}
-                    </Button>
-                  </a>
-                )}
-                {org?.contact_email && (
-                  <a href={`mailto:${org.contact_email}`}>
-                    <Button variant="outline" className="w-full justify-start gap-2">
-                      <Mail className="w-4 h-4" />
-                      {org.contact_email}
-                    </Button>
-                  </a>
-                )}
-                {!org?.contact_phone && !org?.contact_email && (
-                  <p className="text-sm text-muted-foreground">Kontaktdaten werden von der Verwaltung hinterlegt.</p>
+              <CardContent className="space-y-4">
+                {/* Verwaltung */}
+                <div className="space-y-2">
+                  {(org?.contact_phone || org?.contact_email) && (
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Verwaltung</p>
+                  )}
+                  {org?.contact_phone && (
+                    <a href={`tel:${org.contact_phone.replace(/\s+/g, "")}`}>
+                      <Button variant="outline" className="w-full justify-start gap-2">
+                        <Phone className="w-4 h-4" />
+                        {org.contact_phone}
+                      </Button>
+                    </a>
+                  )}
+                  {org?.contact_email && (
+                    <a href={`mailto:${org.contact_email}`}>
+                      <Button variant="outline" className="w-full justify-start gap-2">
+                        <Mail className="w-4 h-4" />
+                        {org.contact_email}
+                      </Button>
+                    </a>
+                  )}
+                  {!org?.contact_phone && !org?.contact_email && (
+                    <p className="text-sm text-muted-foreground">Kontaktdaten werden von der Verwaltung hinterlegt.</p>
+                  )}
+                </div>
+
+                {/* Hauswart / Abwart der Liegenschaft */}
+                {(contract?.unit.property.caretaker_name || contract?.unit.property.caretaker_phone || contract?.unit.property.caretaker_email) && (
+                  <div className="space-y-2 pt-3 border-t">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Wrench className="w-3.5 h-3.5" /> Hauswart
+                    </p>
+                    {contract?.unit.property.caretaker_name && (
+                      <p className="text-sm font-medium">{contract.unit.property.caretaker_name}</p>
+                    )}
+                    {contract?.unit.property.caretaker_phone && (
+                      <a href={`tel:${contract.unit.property.caretaker_phone.replace(/\s+/g, "")}`}>
+                        <Button variant="outline" className="w-full justify-start gap-2">
+                          <Phone className="w-4 h-4" />
+                          {contract.unit.property.caretaker_phone}
+                        </Button>
+                      </a>
+                    )}
+                    {contract?.unit.property.caretaker_email && (
+                      <a href={`mailto:${contract.unit.property.caretaker_email}`}>
+                        <Button variant="outline" className="w-full justify-start gap-2">
+                          <Mail className="w-4 h-4" />
+                          {contract.unit.property.caretaker_email}
+                        </Button>
+                      </a>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
