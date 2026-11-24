@@ -157,7 +157,7 @@ const Kpi = ({ label, value, tone, sub, big }: {
     <div className={`relative rounded-xl border bg-card p-4 sm:p-5 overflow-hidden ${big ? "ring-1 ring-primary/15" : ""}`}>
       <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} />
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`mt-1 font-bold tabular-nums leading-tight ${big ? "text-xl sm:text-3xl" : "text-lg sm:text-2xl"} ${color}`}>
+      <p className={`mt-1 font-bold tabular-nums leading-tight whitespace-nowrap ${big ? "text-xl sm:text-3xl" : "text-lg sm:text-2xl"} ${color}`}>
         {value == null ? "–" : formatCHF(value)}
       </p>
       {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}

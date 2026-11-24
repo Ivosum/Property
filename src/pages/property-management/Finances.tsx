@@ -189,28 +189,28 @@ const Finances = () => {
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2"><DollarSign className="w-5 h-5 text-primary" /></div>
-            <p className="text-xl sm:text-2xl font-bold leading-tight tabular-nums">{isLoading ? "–" : formatCHF(data?.total ?? 0)}</p>
+            <p className="text-lg sm:text-2xl font-bold leading-tight tabular-nums whitespace-nowrap">{isLoading ? "–" : formatCHF(data?.total ?? 0)}</p>
             <p className="text-sm text-muted-foreground">Gesamtvolumen</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2"><CreditCard className="w-5 h-5 text-green-500" /></div>
-            <p className="text-xl sm:text-2xl font-bold leading-tight tabular-nums">{isLoading ? "–" : formatCHF(data?.paid ?? 0)}</p>
+            <p className="text-lg sm:text-2xl font-bold leading-tight tabular-nums whitespace-nowrap">{isLoading ? "–" : formatCHF(data?.paid ?? 0)}</p>
             <p className="text-sm text-muted-foreground">Bezahlte Mieten</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2"><Clock className="w-5 h-5 text-amber-500" /></div>
-            <p className="text-xl sm:text-2xl font-bold leading-tight tabular-nums">{isLoading ? "–" : formatCHF(data?.pending ?? 0)}</p>
+            <p className="text-lg sm:text-2xl font-bold leading-tight tabular-nums whitespace-nowrap">{isLoading ? "–" : formatCHF(data?.pending ?? 0)}</p>
             <p className="text-sm text-muted-foreground">Ausstehend</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2"><AlertCircle className="w-5 h-5 text-destructive" /></div>
-            <p className="text-xl sm:text-2xl font-bold leading-tight tabular-nums">{isLoading ? "–" : formatCHF(data?.overdue ?? 0)}</p>
+            <p className="text-lg sm:text-2xl font-bold leading-tight tabular-nums whitespace-nowrap">{isLoading ? "–" : formatCHF(data?.overdue ?? 0)}</p>
             <p className="text-sm text-muted-foreground">Überfällig</p>
           </CardContent>
         </Card>
