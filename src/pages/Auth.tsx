@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { User, Building2, Briefcase } from "lucide-react";
+import { User, Building2, Briefcase, BadgeCheck } from "lucide-react";
+import { resolveBrokerByCode } from "@/lib/omData";
+
+const sb = supabase as any;
 
 type AppRole = "buyer" | "seller" | "broker";
 
@@ -35,8 +38,17 @@ const roleOptions: { value: AppRole; label: string; icon: React.ReactNode; descr
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { signIn, signUp } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  // Makler-Referral (?ref=CODE): fest zugeordnet, nicht änderbar
+  const refCode = (params.get("ref") || "").trim().toUpperCase();
+  const [broker, setBroker] = useState<{ broker_id: string; broker_name: string | null } | null>(null);
+  useEffect(() => {
+    if (!refCode) return;
+    resolveBrokerByCode(refCode).then(setBroker).catch(() => setBroker(null));
+  }, [refCode]);
 
   // Login state
   const [loginEmail, setLoginEmail] = useState("");
@@ -103,7 +115,7 @@ const Auth = () => {
 
     setLoading(true);
 
-    const { error } = await signUp(signupEmail, signupPassword, selectedRole, firstName, lastName);
+    const { error } = await signUp(signupEmail, signupPassword, selectedRole, firstName, lastName, broker?.broker_id ?? null);
 
     if (error) {
       toast.error("Registrierung fehlgeschlagen", {
@@ -174,6 +186,21 @@ const Auth = () => {
               </TabsContent>
 
               <TabsContent value="signup" className="mt-0">
+                {refCode && (
+                  <div className={`mb-4 rounded-lg border p-3 flex items-start gap-2 ${broker ? "bg-primary/5 border-primary/20" : "bg-amber-50 border-amber-200"}`}>
+                    <BadgeCheck className={`w-5 h-5 shrink-0 ${broker ? "text-primary" : "text-amber-500"}`} />
+                    <div className="text-sm">
+                      {broker ? (
+                        <>
+                          <p className="font-medium">Empfohlen von {broker.broker_name || "Ihrem Makler"}</p>
+                          <p className="text-muted-foreground">Sie werden fest diesem Makler zugeordnet (nicht änderbar).</p>
+                        </>
+                      ) : (
+                        <p className="text-amber-700">Der Makler-Code „{refCode}" wurde nicht gefunden. Sie können sich trotzdem registrieren.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">

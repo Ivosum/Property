@@ -23,7 +23,7 @@ interface AuthContextType {
   profile: Profile | null;
   role: AppRole | null;
   loading: boolean;
-  signUp: (email: string, password: string, role: AppRole, firstName?: string, lastName?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, role: AppRole, firstName?: string, lastName?: string, brokerReferralId?: string | null) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -116,7 +116,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     password: string,
     selectedRole: AppRole,
     firstName?: string,
-    lastName?: string
+    lastName?: string,
+    brokerReferralId?: string | null
   ) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -144,12 +145,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error("Error assigning role:", roleError);
         }
 
-        // Update profile with name
-        if (firstName || lastName) {
-          await supabase
-            .from("profiles")
-            .update({ first_name: firstName, last_name: lastName })
-            .eq("user_id", data.user.id);
+        // Update profile with name + feste Makler-Zuordnung (Referral)
+        const profilePatch: Record<string, unknown> = {};
+        if (firstName) profilePatch.first_name = firstName;
+        if (lastName) profilePatch.last_name = lastName;
+        if (brokerReferralId && selectedRole !== "broker") profilePatch.broker_referral_id = brokerReferralId;
+        if (Object.keys(profilePatch).length > 0) {
+          await supabase.from("profiles").update(profilePatch).eq("user_id", data.user.id);
         }
       }
 
