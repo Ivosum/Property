@@ -1224,3 +1224,75 @@ export async function decidePortalRequest(requestId: string, action: "approve" |
   }
   if (data?.error) throw new Error(data.error);
 }
+
+// ── Mieterportal: eigenes erweitertes Profil (nie löschen, nur überschreiben) ──
+export interface TenantProfile {
+  id: string;
+  first_name: string; last_name: string;
+  email: string | null; phone: string | null;
+  date_of_birth: string | null; current_address: string | null;
+  marital_status: string | null;
+  has_liability_insurance: boolean | null;
+  liability_company: string | null; liability_policy_no: string | null;
+  garage_brand: string | null; garage_plate: string | null;
+  partner: any | null;
+  id_front_path: string | null; id_back_path: string | null;
+  partner_id_front_path: string | null; partner_id_back_path: string | null;
+}
+
+export interface FieldHistoryEntry {
+  id: string; field: string; old_value: string | null; new_value: string | null; changed_at: string;
+}
+
+// Profil des eingeloggten Mieters laden (über user_id).
+export async function getMyTenantProfile(): Promise<TenantProfile | null> {
+  const { data: auth } = await sb.auth.getUser();
+  const uid = auth?.user?.id;
+  if (!uid) return null;
+  const { data, error } = await sb.from("pm_tenants")
+    .select("id, first_name, last_name, email, phone, date_of_birth, current_address, marital_status, has_liability_insurance, liability_company, liability_policy_no, garage_brand, garage_plate, partner, id_front_path, id_back_path, partner_id_front_path, partner_id_back_path")
+    .eq("user_id", uid).maybeSingle();
+  if (error) throw error;
+  return data as TenantProfile | null;
+}
+
+// Änderungshistorie des eigenen Profils (durchgestrichene Altwerte).
+export async function getMyFieldHistory(tenantId: string): Promise<FieldHistoryEntry[]> {
+  const { data, error } = await sb.from("pm_tenant_field_history")
+    .select("id, field, old_value, new_value, changed_at")
+    .eq("tenant_id", tenantId)
+    .order("changed_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as FieldHistoryEntry[];
+}
+
+// Eigenes Profil per Patch aktualisieren (nur gesetzte Schlüssel; alter Wert landet in Historie).
+export async function updateMyTenantProfile(patch: Record<string, unknown>): Promise<void> {
+  const { error } = await sb.rpc("tenant_update_own_profile", { _patch: patch });
+  if (error) throw error;
+}
+
+// Ausweis-/Partner-Ausweis-Foto in den privaten Bucket hochladen; gibt den Storage-Pfad zurück.
+export async function uploadTenantIdFile(tenantId: string, kind: "id_front" | "id_back" | "partner_id_front" | "partner_id_back", file: File): Promise<string> {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${tenantId}/${kind}_${Date.now()}.${ext}`;
+  const { error } = await sb.storage.from("tenant-ids").upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (error) throw error;
+  return path;
+}
+
+// ── Verwaltung: Mieterprofil + Historie + ID-Fotos ──────────────────────────
+// Profil eines beliebigen Mieters (Verwaltung liest per RLS).
+export async function getTenantProfileById(tenantId: string): Promise<TenantProfile | null> {
+  const { data, error } = await sb.from("pm_tenants")
+    .select("id, first_name, last_name, email, phone, date_of_birth, current_address, marital_status, has_liability_insurance, liability_company, liability_policy_no, garage_brand, garage_plate, partner, id_front_path, id_back_path, partner_id_front_path, partner_id_back_path")
+    .eq("id", tenantId).maybeSingle();
+  if (error) throw error;
+  return data as TenantProfile | null;
+}
+
+// Signierte URL für ein ID-Foto (nur Verwaltung hat Leserecht im Bucket).
+export async function getTenantIdSignedUrl(path: string): Promise<string | null> {
+  const { data } = await sb.storage.from("tenant-ids").createSignedUrl(path, 600);
+  return data?.signedUrl ?? null;
+}

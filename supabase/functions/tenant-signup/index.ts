@@ -28,6 +28,8 @@ Deno.serve(async (req) => {
     const phone = body.phone ? String(body.phone).trim() : null;
     const message = body.message ? String(body.message).trim().slice(0, 500) : null;
     const password = String(body.password ?? "");
+    const date_of_birth = body.date_of_birth ? String(body.date_of_birth).trim() : null;
+    const current_address = body.current_address ? String(body.current_address).trim() : null;
 
     if (!token) return json({ error: "Ungültiger Link (kein Token)." }, 400);
     if (!first_name || !last_name) return json({ error: "Bitte Vor- und Nachnamen angeben." }, 400);
@@ -85,6 +87,7 @@ Deno.serve(async (req) => {
       unit_id: unit.unit_id,
       user_id: userId,
       first_name, last_name, email, phone, message,
+      date_of_birth, current_address,
       status: "pending",
     });
     if (reqErr) return json({ error: "Anfrage konnte nicht gespeichert werden: " + reqErr.message }, 500);

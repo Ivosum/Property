@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import TenantEditDialog from "@/components/property-management/TenantEditDialog";
 import UnitManageDialog from "@/components/property-management/UnitManageDialog";
+import TenantProfileView from "@/components/property-management/TenantProfileView";
 import { UNIT_TYPE_LABEL, inviteTenantPortal } from "@/lib/pmData";
 
 const sb = supabase as any;
@@ -293,6 +294,14 @@ const TenantDetail = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Erweitertes Mieterprofil + Änderungshistorie */}
+      {tenantId && (
+        <div className="mt-8">
+          <h2 className="font-display text-xl font-semibold mb-3">Mieterangaben & Verlauf</h2>
+          <TenantProfileView tenantId={tenantId} />
+        </div>
+      )}
 
       {t && (
         <TenantEditDialog

@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
 
     const { data: reqRow, error: reqErr } = await admin
       .from("pm_portal_requests")
-      .select("id, unit_id, user_id, first_name, last_name, email, phone, status")
+      .select("id, unit_id, user_id, first_name, last_name, email, phone, date_of_birth, current_address, status")
       .eq("id", request_id)
       .maybeSingle();
     if (reqErr || !reqRow) return json({ error: "Anfrage nicht gefunden." }, 404);
@@ -67,15 +67,19 @@ Deno.serve(async (req) => {
 
     if (contract?.tenant_id) {
       tenantId = contract.tenant_id;
-      // user_id am bestehenden Mieter setzen (Daten nicht überschreiben)
-      await admin.from("pm_tenants")
-        .update({ user_id: reqRow.user_id, portal_invited_at: new Date().toISOString() })
-        .eq("id", tenantId);
+      // user_id am bestehenden Mieter setzen; Geburtsdatum/Adresse nur ergänzen, wenn leer
+      const patch: Record<string, unknown> = { user_id: reqRow.user_id, portal_invited_at: new Date().toISOString() };
+      const { data: existingT } = await admin.from("pm_tenants")
+        .select("date_of_birth, current_address").eq("id", tenantId).maybeSingle();
+      if (reqRow.date_of_birth && !existingT?.date_of_birth) patch.date_of_birth = reqRow.date_of_birth;
+      if (reqRow.current_address && !existingT?.current_address) patch.current_address = reqRow.current_address;
+      await admin.from("pm_tenants").update(patch).eq("id", tenantId);
     } else {
       // Kein Mieter hinterlegt → aus Anfragedaten neu anlegen
       const { data: newTenant, error: tErr } = await admin.from("pm_tenants").insert({
         first_name: reqRow.first_name, last_name: reqRow.last_name,
         email: reqRow.email, phone: reqRow.phone,
+        date_of_birth: reqRow.date_of_birth, current_address: reqRow.current_address,
         user_id: reqRow.user_id, portal_invited_at: new Date().toISOString(),
       }).select("id").single();
       if (tErr || !newTenant) return json({ error: "Mieter konnte nicht angelegt werden: " + (tErr?.message ?? "") }, 500);

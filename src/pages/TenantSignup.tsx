@@ -29,7 +29,7 @@ const TenantSignup = () => {
   const [done, setDone] = useState<{ existing: boolean } | null>(null);
 
   const [form, setForm] = useState({
-    first_name: "", last_name: "", email: "", phone: "", password: "", password2: "",
+    first_name: "", last_name: "", email: "", phone: "", date_of_birth: "", current_address: "", password: "", password2: "",
   });
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -47,6 +47,8 @@ const TenantSignup = () => {
     e.preventDefault();
     if (!form.first_name.trim() || !form.last_name.trim()) { toast.error("Bitte Vor- und Nachnamen angeben."); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) { toast.error("Bitte eine gültige E-Mail-Adresse angeben."); return; }
+    if (!form.date_of_birth) { toast.error("Bitte das Geburtsdatum angeben."); return; }
+    if (!form.current_address.trim()) { toast.error("Bitte die aktuelle Adresse angeben."); return; }
     if (form.password.length < 8) { toast.error("Das Passwort muss mindestens 8 Zeichen haben."); return; }
     if (form.password !== form.password2) { toast.error("Die Passwörter stimmen nicht überein."); return; }
 
@@ -59,6 +61,8 @@ const TenantSignup = () => {
           last_name: form.last_name.trim(),
           email: form.email.trim(),
           phone: form.phone.trim() || null,
+          date_of_birth: form.date_of_birth || null,
+          current_address: form.current_address.trim() || null,
           password: form.password,
         },
       });
@@ -165,7 +169,11 @@ const TenantSignup = () => {
                 <div className="space-y-2"><Label>Nachname</Label><Input value={form.last_name} onChange={(e) => set("last_name", e.target.value)} required /></div>
               </div>
               <div className="space-y-2"><Label>E-Mail</Label><Input type="email" placeholder="ihre@email.ch" value={form.email} onChange={(e) => set("email", e.target.value)} required /></div>
-              <div className="space-y-2"><Label>Telefon (optional)</Label><Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+41 ..." /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>Geburtsdatum</Label><Input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} required /></div>
+                <div className="space-y-2"><Label>Telefon (optional)</Label><Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+41 ..." /></div>
+              </div>
+              <div className="space-y-2"><Label>Aktuelle Adresse</Label><Input value={form.current_address} onChange={(e) => set("current_address", e.target.value)} placeholder="Strasse Nr., PLZ Ort" required /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2"><Label>Passwort</Label><Input type="password" placeholder="••••••••" value={form.password} onChange={(e) => set("password", e.target.value)} required /></div>
                 <div className="space-y-2"><Label>Wiederholen</Label><Input type="password" placeholder="••••••••" value={form.password2} onChange={(e) => set("password2", e.target.value)} required /></div>

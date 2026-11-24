@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import TenantProfileSection from "@/components/property-management/TenantProfileSection";
 
 interface TenantData {
   id: string;
@@ -458,6 +459,13 @@ const TenantPortal = () => {
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        {/* Meine Angaben – erweitertes Profil, jederzeit anpassbar */}
+        <div className="mt-10">
+          <h2 className="font-display text-2xl font-bold mb-1">Meine Angaben</h2>
+          <p className="text-muted-foreground mb-5">Halten Sie Ihre Daten aktuell. Änderungen überschreiben den alten Wert – dieser bleibt als Verlauf erhalten.</p>
+          <TenantProfileSection />
         </div>
       </main>
     </div>
