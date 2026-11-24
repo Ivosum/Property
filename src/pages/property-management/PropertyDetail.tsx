@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { insertUnits } from "@/lib/pmData";
 import { downloadTemplate, normalizeUnitType } from "@/lib/importMapping";
-import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Home, Warehouse, Car, Package, Link2, MapPin, Upload, Download, FileSpreadsheet, ChevronDown, Pencil } from "lucide-react";
 
 const sb = supabase as any;
 
@@ -55,6 +55,7 @@ const PropertyDetail = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [unitOpen, setUnitOpen] = useState(false);
+  const [editUnit, setEditUnit] = useState<UnitRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [tab, setTab] = useState<"einheiten" | "mieter" | "buchhaltung" | "dokumente">("einheiten");
 
@@ -313,15 +314,23 @@ const PropertyDetail = () => {
                   .map((u) => {
                     const Icon = typeIcon(u.unit_type);
                     return (
-                      <Card key={u.id}>
+                      <Card key={u.id} className="group relative cursor-pointer transition-shadow hover:shadow-md"
+                        onClick={() => setEditUnit(u)}>
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
                             <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                               <Icon className="w-5 h-5 text-primary" />
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${statusBadge(u.status)}`}>
-                              {statusLabel(u.status)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${statusBadge(u.status)}`}>
+                                {statusLabel(u.status)}
+                              </span>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Bearbeiten"
+                                onClick={(e) => { e.stopPropagation(); setEditUnit(u); }}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent>
@@ -349,6 +358,8 @@ const PropertyDetail = () => {
       ))}
 
       <UnitDialog open={unitOpen} onOpenChange={setUnitOpen} propertyId={propertyId!} onSaved={refresh} />
+      <UnitDialog open={!!editUnit} onOpenChange={(o) => { if (!o) setEditUnit(null); }}
+        propertyId={propertyId!} unit={editUnit ?? undefined} onSaved={refresh} />
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
