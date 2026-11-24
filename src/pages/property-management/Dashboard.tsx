@@ -92,17 +92,17 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-8">
         {stats.map((stat) => (
           <Card key={stat.label} onClick={() => navigate(stat.to)} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <stat.icon className="w-6 h-6 text-primary" />
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
               </div>
-              <p className="text-2xl font-bold">{stat.value}</p>
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
+              <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">{stat.label}</p>
               {stat.sub && <p className="text-xs text-primary mt-1">{stat.sub}</p>}
             </CardContent>
           </Card>

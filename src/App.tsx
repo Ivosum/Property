@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import TenantAuth from "./pages/TenantAuth";
 import TenantSignup from "./pages/TenantSignup";
+import MobileCheck from "./pages/MobileCheck";
 import PropertyManagementAuth from "./pages/PropertyManagementAuth";
 
 // Off-Market Routes
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/tenant-auth" element={<TenantAuth />} />
             <Route path="/mieter-anmeldung" element={<TenantSignup />} />
+            <Route path="/mobile-check" element={<MobileCheck />} />
             <Route path="/pm-auth" element={<PropertyManagementAuth />} />
             
             {/* Off-Market Platform Routes */}
