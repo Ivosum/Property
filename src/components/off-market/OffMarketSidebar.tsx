@@ -46,7 +46,12 @@ const navItems: NavItem[] = [
   { label: "Einstellungen", href: "/off-market/settings", icon: <Settings className="w-5 h-5" />, roles: ["buyer", "seller", "broker", "admin"] },
 ];
 
-const OffMarketSidebar = () => {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}
+
+const OffMarketSidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   const location = useLocation();
   const { role, profile, signOut } = useAuth();
 
@@ -78,10 +83,18 @@ const OffMarketSidebar = () => {
   };
 
   return (
-    <aside className="w-64 bg-card border-r border-border flex flex-col h-screen sticky top-0">
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={onClose} aria-hidden />
+      )}
+      <aside className={cn(
+        "w-64 bg-card border-r border-border flex flex-col h-screen z-50",
+        "fixed top-0 left-0 transition-transform duration-200 lg:sticky lg:translate-x-0",
+        mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
       {/* Logo */}
       <div className="p-4 border-b border-border">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/" onClick={onClose} className="flex items-center gap-2">
           <img src={logo} alt="Property Network Logo" className="h-9 w-auto" />
           <div>
             <span className="font-display font-semibold text-sm block">Off-Market</span>
@@ -117,6 +130,7 @@ const OffMarketSidebar = () => {
               <li key={item.href}>
                 <Link
                   to={item.href}
+                  onClick={onClose}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
                     isActive
@@ -144,7 +158,8 @@ const OffMarketSidebar = () => {
           <span>Abmelden</span>
         </Button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
 
