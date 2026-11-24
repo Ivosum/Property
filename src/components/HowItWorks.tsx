@@ -108,14 +108,14 @@ const HowItWorks = () => {
                 </p>
                 
                 {/* Process Steps */}
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
                   {service.steps.map((step, stepIndex) => (
                     <div key={step} className="flex items-center gap-2">
-                      <span className="px-3 py-1.5 bg-secondary rounded-lg font-medium text-foreground/80 border border-border/50">
+                      <span className="px-2.5 py-1.5 bg-secondary rounded-lg font-medium text-foreground/80 border border-border/50 whitespace-nowrap">
                         {step}
                       </span>
                       {stepIndex < service.steps.length - 1 && (
-                        <ArrowRight className="w-3 h-3 text-primary/50" />
+                        <ArrowRight className="w-3 h-3 text-primary/50 shrink-0" />
                       )}
                     </div>
                   ))}
