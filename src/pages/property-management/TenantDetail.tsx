@@ -7,11 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Loader2, Mail, Phone, Home, FileText, CreditCard, Download,
-  Pencil, Car, Box, Settings2, Users,
+  Pencil, Car, Box, Settings2, Users, KeyRound, CheckCircle2, Send,
 } from "lucide-react";
+import { toast } from "sonner";
 import TenantEditDialog from "@/components/property-management/TenantEditDialog";
 import UnitManageDialog from "@/components/property-management/UnitManageDialog";
-import { UNIT_TYPE_LABEL } from "@/lib/pmData";
+import { UNIT_TYPE_LABEL, inviteTenantPortal } from "@/lib/pmData";
 
 const sb = supabase as any;
 
@@ -34,13 +35,33 @@ const TenantDetail = () => {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [manageUnit, setManageUnit] = useState<{ propertyId: string; unitId: string; label: string } | null>(null);
+  const [inviting, setInviting] = useState(false);
+
+  const handleInvite = async () => {
+    if (!tenantId) return;
+    setInviting(true);
+    try {
+      const res = await inviteTenantPortal(tenantId);
+      toast.success(
+        res.mode === "linked_existing" ? "Bestehendes Konto verknüpft und Einladung gesendet"
+        : res.mode === "reinvited" ? "Einladung erneut gesendet"
+        : "Portalzugang erstellt und Einladung gesendet",
+        { description: `Eine E-Mail wurde an ${res.email} verschickt.` },
+      );
+      queryClient.invalidateQueries({ queryKey: ["pm-tenant-360", tenantId] });
+    } catch (e) {
+      toast.error("Einladung fehlgeschlagen", { description: e instanceof Error ? e.message : "" });
+    } finally {
+      setInviting(false);
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["pm-tenant-360", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data: tenant } = await sb.from("pm_tenants")
-        .select("id, first_name, last_name, email, phone, nationality, employer, co_tenants")
+        .select("id, first_name, last_name, email, phone, nationality, employer, co_tenants, user_id, portal_invited_at")
         .eq("id", tenantId).single();
 
       const [{ data: contracts }, { data: units }, { data: props }, { data: payments }, { data: docs }] = await Promise.all([
@@ -121,9 +142,35 @@ const TenantDetail = () => {
             </div>
           )}
         </div>
-        <Button variant="outline" onClick={() => setEditOpen(true)}>
-          <Pencil className="w-4 h-4 mr-2" /> Bearbeiten
-        </Button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            {t?.user_id ? (
+              <Button variant="outline" onClick={handleInvite} disabled={inviting} title="Neue Einladungs-/Passwort-Mail senden">
+                {inviting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                Einladung erneut senden
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={handleInvite} disabled={inviting || !t?.email}
+                title={t?.email ? "Portalzugang erstellen und einladen" : "Keine E-Mail hinterlegt"}>
+                {inviting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
+                Portalzugang einladen
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil className="w-4 h-4 mr-2" /> Bearbeiten
+            </Button>
+          </div>
+          {t?.user_id ? (
+            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Portalzugang aktiv
+              {t?.portal_invited_at ? ` · eingeladen ${formatDate(t.portal_invited_at)}` : ""}
+            </span>
+          ) : !t?.email ? (
+            <span className="text-xs text-muted-foreground">Für Portalzugang zuerst eine E-Mail hinterlegen</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">Noch kein Portalzugang</span>
+          )}
+        </div>
       </div>
 
       {/* Kennzahlen */}

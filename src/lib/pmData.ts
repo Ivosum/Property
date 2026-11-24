@@ -1122,3 +1122,47 @@ export async function renameFloor(
   if (error) throw error;
   return (data as unknown[] | null)?.length ?? 0;
 }
+
+// ── Mieterportal: Zugang einladen ────────────────────────────────────────────
+export type TenantPortalStatus = "active" | "invited" | "none";
+
+// Lädt den Portal-Status eines Mieters (user_id gesetzt? schon eingeloggt?).
+// last_sign_in_at kommt nicht aus pm_tenants; wir leiten "active" daraus ab,
+// dass ein user_id verknüpft ist UND der Mieter sich eingeloggt hat (via RPC
+// nicht verfügbar im Client) → wir behandeln "verknüpft" als mindestens invited
+// und zeigen "active" erst, wenn invited_at gesetzt wurde und Login erfolgt ist.
+export async function getTenantPortalInfo(tenantId: string): Promise<{
+  user_id: string | null; portal_invited_at: string | null; email: string | null;
+}> {
+  const { data, error } = await sb
+    .from("pm_tenants")
+    .select("user_id, portal_invited_at, email")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? { user_id: null, portal_invited_at: null, email: null };
+}
+
+// Lädt den Mieter zum Portal ein (Edge Function invite-tenant). Erstellt bzw.
+// verknüpft den Auth-User und verschickt die Einladungs-/Passwort-Mail.
+export async function inviteTenantPortal(tenantId: string): Promise<{
+  ok: boolean; mode: string; email: string;
+}> {
+  const redirect_to = `${window.location.origin}/tenant-portal`;
+  const { data, error } = await sb.functions.invoke("invite-tenant", {
+    body: { tenant_id: tenantId, redirect_to },
+  });
+  if (error) {
+    // Fehlertext aus der Function-Antwort herausziehen, falls vorhanden
+    let msg = error.message || "Einladung fehlgeschlagen";
+    try {
+      const ctx = (error as { context?: { body?: string } }).context;
+      if (ctx?.body) { const b = JSON.parse(ctx.body); if (b?.error) msg = b.error; }
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  // Einladungszeitpunkt markieren (für Statusanzeige)
+  await sb.from("pm_tenants").update({ portal_invited_at: new Date().toISOString() }).eq("id", tenantId);
+  return data as { ok: boolean; mode: string; email: string };
+}

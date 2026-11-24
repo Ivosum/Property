@@ -63,6 +63,7 @@ const TenantPortal = () => {
   const [contract, setContract] = useState<ContractData | null>(null);
   const [payments, setPayments] = useState<PaymentData[]>([]);
   const [tenantDocs, setTenantDocs] = useState<TenantDocData[]>([]);
+  const [org, setOrg] = useState<{ org_name: string; contact_email: string | null; contact_phone: string | null } | null>(null);
 
   useEffect(() => {
     checkAuthAndLoadData();
@@ -107,6 +108,14 @@ const TenantPortal = () => {
     ]);
     setPayments((paymentData ?? []) as PaymentData[]);
     setTenantDocs((docData ?? []) as TenantDocData[]);
+
+    // Verwaltungs-Kontaktdaten laden (für Kontakt-Karte & Header)
+    const { data: orgData } = await supabase
+      .from("pm_org_settings")
+      .select("org_name, contact_email, contact_phone")
+      .limit(1)
+      .maybeSingle();
+    if (orgData) setOrg(orgData as typeof org);
 
     // Load active contract with unit and property info
     const { data: contractData } = await supabase
@@ -234,7 +243,7 @@ const TenantPortal = () => {
             <div>
               <p className="font-semibold">Mieterportal</p>
               <p className="text-xs text-muted-foreground">
-                {contract?.unit.property.name || "Swiss Property Management AG"}
+                {contract?.unit.property.name || org?.org_name || "Hausverwaltung"}
               </p>
             </div>
           </div>
@@ -399,17 +408,30 @@ const TenantPortal = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Kontakt</CardTitle>
-                <CardDescription>Bei Fragen erreichen Sie uns hier</CardDescription>
+                <CardDescription>
+                  {org?.org_name ? `${org.org_name} – bei Fragen erreichen Sie uns hier` : "Bei Fragen erreichen Sie uns hier"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button variant="outline" className="w-full justify-start gap-2">
-                  <Phone className="w-4 h-4" />
-                  +41 44 123 45 67
-                </Button>
-                <Button variant="outline" className="w-full justify-start gap-2">
-                  <Mail className="w-4 h-4" />
-                  info@property-mgmt.ch
-                </Button>
+                {org?.contact_phone && (
+                  <a href={`tel:${org.contact_phone.replace(/\s+/g, "")}`}>
+                    <Button variant="outline" className="w-full justify-start gap-2">
+                      <Phone className="w-4 h-4" />
+                      {org.contact_phone}
+                    </Button>
+                  </a>
+                )}
+                {org?.contact_email && (
+                  <a href={`mailto:${org.contact_email}`}>
+                    <Button variant="outline" className="w-full justify-start gap-2">
+                      <Mail className="w-4 h-4" />
+                      {org.contact_email}
+                    </Button>
+                  </a>
+                )}
+                {!org?.contact_phone && !org?.contact_email && (
+                  <p className="text-sm text-muted-foreground">Kontaktdaten werden von der Verwaltung hinterlegt.</p>
+                )}
               </CardContent>
             </Card>
 

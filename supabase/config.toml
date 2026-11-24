@@ -1,4 +1,4 @@
-project_id = "dvcuwzcrljqwcjbttxzz"
+project_id = "arihoxacyzfmsoxvyaqk"
 [functions.classify-booking]
 verify_jwt = true
 
@@ -9,4 +9,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.export-immoxml]
+verify_jwt = true
+
+[functions.invite-tenant]
 verify_jwt = true
