@@ -101,7 +101,7 @@ const Dashboard = () => {
                   <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
               </div>
-              <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
+              <p className="text-lg sm:text-2xl font-bold leading-tight tabular-nums">{stat.value}</p>
               <p className="text-xs sm:text-sm text-muted-foreground">{stat.label}</p>
               {stat.sub && <p className="text-xs text-primary mt-1">{stat.sub}</p>}
             </CardContent>
