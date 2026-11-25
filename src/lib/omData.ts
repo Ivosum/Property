@@ -128,3 +128,13 @@ export const formatCHF = (n: number, currency = "CHF") =>
 export const PROPERTY_TYPE_LABEL: Record<string, string> = {
   apartment: "Wohnung", house: "Haus", commercial: "Gewerbe", land: "Grundstück",
 };
+
+// Telefonnummer -> wa.me-Format (nur Ziffern, CH-Default +41). null wenn unbrauchbar.
+export function toWaNumber(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  let d = phone.replace(/[^\d+]/g, "");
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  if (d.startsWith("0")) d = "+41" + d.slice(1);
+  d = d.replace(/\D/g, "");
+  return d.length >= 8 ? d : null;
+}

@@ -7,16 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageCircle, Search, Send, Loader2, Mail } from "lucide-react";
-
-// Telefonnummer -> wa.me-Format (nur Ziffern, CH-Default +41)
-const toWaNumber = (phone: string | null): string | null => {
-  if (!phone) return null;
-  let d = phone.replace(/[^\d+]/g, "");
-  if (d.startsWith("00")) d = "+" + d.slice(2);
-  if (d.startsWith("0")) d = "+41" + d.slice(1);
-  d = d.replace(/\D/g, "");
-  return d.length >= 8 ? d : null;
-};
+import { toWaNumber } from "@/lib/omData";
 
 interface MessageRow {
   id: string;

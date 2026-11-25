@@ -8,12 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
-  Users, Search, Plus, Phone, Mail, Building2, Loader2, Send, QrCode, Pencil, Trash2, UserPlus,
+  Users, Search, Plus, Phone, Mail, Building2, Loader2, Send, QrCode, Pencil, Trash2, UserPlus, MessageCircle,
 } from "lucide-react";
 import LeadDialog from "@/components/off-market/LeadDialog";
 import SharePropertiesDialog from "@/components/off-market/SharePropertiesDialog";
 import BrokerQrDialog from "@/components/off-market/BrokerQrDialog";
-import { getMyLeads, deleteLead, type OmLead } from "@/lib/omData";
+import { getMyLeads, deleteLead, toWaNumber, type OmLead } from "@/lib/omData";
 
 const sb = supabase as any;
 
@@ -140,6 +140,20 @@ const Clients = () => {
                       </div>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
+                      {toWaNumber(l.phone) ? (
+                        <a href={`https://wa.me/${toWaNumber(l.phone)}`} target="_blank" rel="noopener noreferrer" title="WhatsApp">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700"><MessageCircle className="w-4 h-4" /></Button>
+                        </a>
+                      ) : (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/40" disabled title="Keine Nummer"><MessageCircle className="w-4 h-4" /></Button>
+                      )}
+                      {l.email ? (
+                        <a href={`mailto:${l.email}`} title="Outlook / Mail">
+                          <Button variant="ghost" size="icon" className="h-8 w-8"><Mail className="w-4 h-4" /></Button>
+                        </a>
+                      ) : (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/40" disabled title="Keine E-Mail"><Mail className="w-4 h-4" /></Button>
+                      )}
                       <Button variant="outline" size="sm" onClick={() => setShareFor({ id: l.id, name: l.first_name })}>
                         <Send className="w-3.5 h-3.5 mr-1" /> Immobilien
                       </Button>
