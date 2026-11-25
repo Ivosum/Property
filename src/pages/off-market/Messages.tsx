@@ -6,8 +6,8 @@ import OffMarketLayout from "@/components/off-market/OffMarketLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageCircle, Search, Send, Loader2, Mail } from "lucide-react";
-import { toWaNumber } from "@/lib/omData";
+import { MessageCircle, Search, Send, Loader2, Mail, Phone, UserPlus } from "lucide-react";
+import { toWaNumber, getMyLeads } from "@/lib/omData";
 
 interface MessageRow {
   id: string;
@@ -72,6 +72,13 @@ const Messages = () => {
   });
 
   const nameOf = (id: string) => names?.get(id) ?? "Unbekannt";
+
+  // Eigene Kontakte (Leads) – für Direktkontakt per WhatsApp/Outlook ohne bestehenden Chat
+  const { data: leads } = useQuery({
+    queryKey: ["om-leads"],
+    enabled: !!user,
+    queryFn: getMyLeads,
+  });
 
   // Kontaktdaten (Telefon/E-Mail) des aktiven Gesprächspartners für WhatsApp/Outlook
   const { data: partnerContact } = useQuery({
@@ -165,12 +172,7 @@ const Messages = () => {
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
               </div>
-            ) : filteredConvs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground px-4">
-                <MessageCircle className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">Noch keine Konversationen.</p>
-              </div>
-            ) : (
+            ) : filteredConvs.length === 0 ? null : (
               <div className="divide-y">
                 {filteredConvs.map((conv) => (
                   <button
@@ -204,6 +206,60 @@ const Messages = () => {
                   </button>
                 ))}
               </div>
+            )}
+
+            {/* Eigene Kontakte: direkt per WhatsApp / Outlook anschreiben */}
+            {(() => {
+              const t = search.trim().toLowerCase();
+              const contactList = (leads ?? []).filter((l) =>
+                !t || `${l.first_name} ${l.last_name ?? ""} ${l.email ?? ""}`.toLowerCase().includes(t));
+              if (contactList.length === 0) return null;
+              return (
+                <div className="border-t">
+                  <p className="px-4 pt-4 pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <UserPlus className="w-3.5 h-3.5" /> Meine Kontakte
+                  </p>
+                  <div className="divide-y">
+                    {contactList.map((l) => {
+                      const wa = toWaNumber(l.phone);
+                      return (
+                        <div key={l.id} className="flex items-center gap-3 p-3">
+                          <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                            <span className="text-primary font-semibold text-sm">{l.first_name[0]}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{[l.first_name, l.last_name].filter(Boolean).join(" ")}</p>
+                            <p className="text-xs text-muted-foreground truncate">{l.phone || l.email || "keine Kontaktdaten"}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            {wa ? (
+                              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title="WhatsApp">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700"><MessageCircle className="w-4 h-4" /></Button>
+                              </a>
+                            ) : (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/40" disabled title="Keine Nummer"><MessageCircle className="w-4 h-4" /></Button>
+                            )}
+                            {l.email ? (
+                              <a href={`mailto:${l.email}`} title="Outlook / Mail">
+                                <Button variant="ghost" size="icon" className="h-8 w-8"><Mail className="w-4 h-4" /></Button>
+                              </a>
+                            ) : (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/40" disabled title="Keine E-Mail"><Mail className="w-4 h-4" /></Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Hinweis, wenn weder Chats noch Kontakte */}
+            {!isLoading && filteredConvs.length === 0 && (leads ?? []).length === 0 && (
+              <p className="px-4 py-4 text-xs text-muted-foreground text-center">
+                Erfassen Sie Kontakte unter „Kunden", um sie hier direkt per WhatsApp oder Outlook anzuschreiben.
+              </p>
             )}
           </CardContent>
         </Card>
