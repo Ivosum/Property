@@ -6,7 +6,17 @@ import OffMarketLayout from "@/components/off-market/OffMarketLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageCircle, Search, Send, Loader2 } from "lucide-react";
+import { MessageCircle, Search, Send, Loader2, Mail } from "lucide-react";
+
+// Telefonnummer -> wa.me-Format (nur Ziffern, CH-Default +41)
+const toWaNumber = (phone: string | null): string | null => {
+  if (!phone) return null;
+  let d = phone.replace(/[^\d+]/g, "");
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  if (d.startsWith("0")) d = "+41" + d.slice(1);
+  d = d.replace(/\D/g, "");
+  return d.length >= 8 ? d : null;
+};
 
 interface MessageRow {
   id: string;
@@ -72,6 +82,17 @@ const Messages = () => {
 
   const nameOf = (id: string) => names?.get(id) ?? "Unbekannt";
 
+  // Kontaktdaten (Telefon/E-Mail) des aktiven Gesprächspartners für WhatsApp/Outlook
+  const { data: partnerContact } = useQuery({
+    queryKey: ["chat-partner-contact", selected],
+    enabled: !!selected,
+    queryFn: async () => {
+      const { data } = await (supabase as any).rpc("chat_partner_contact", { _partner_id: selected });
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row ?? { phone: null, email: null }) as { phone: string | null; email: string | null };
+    },
+  });
+
   // Konversationen aufbauen
   const conversations: Conversation[] = partnerIds
     .map((pid) => {
@@ -130,7 +151,7 @@ const Messages = () => {
       <div className="mb-8">
         <h1 className="font-display text-3xl font-bold">Nachrichten</h1>
         <p className="text-muted-foreground mt-1">
-          Kommunikation mit Käufern, Verkäufern und Maklern
+          Kommunikation mit Käufern, Verkäufern und Maklern – im Chat, per WhatsApp oder Outlook
         </p>
       </div>
 
@@ -201,13 +222,40 @@ const Messages = () => {
           {selected ? (
             <>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                    <span className="text-primary font-semibold">{nameOf(selected)[0]}</span>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <span className="text-primary font-semibold">{nameOf(selected)[0]}</span>
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">{nameOf(selected)}</CardTitle>
+                      <CardDescription>{activeMsgs.length} Nachrichten</CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{nameOf(selected)}</CardTitle>
-                    <CardDescription>{activeMsgs.length} Nachrichten</CardDescription>
+                  {/* Direktkontakt per WhatsApp / Outlook */}
+                  <div className="flex items-center gap-2">
+                    {toWaNumber(partnerContact?.phone ?? null) ? (
+                      <a href={`https://wa.me/${toWaNumber(partnerContact!.phone)}`} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" size="sm" className="text-green-600 hover:text-green-700 border-green-200">
+                          <MessageCircle className="w-4 h-4 mr-1" /> WhatsApp
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled title="Keine Telefonnummer hinterlegt">
+                        <MessageCircle className="w-4 h-4 mr-1" /> WhatsApp
+                      </Button>
+                    )}
+                    {partnerContact?.email ? (
+                      <a href={`mailto:${partnerContact.email}`}>
+                        <Button variant="outline" size="sm">
+                          <Mail className="w-4 h-4 mr-1" /> Outlook / Mail
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled title="Keine E-Mail verfügbar">
+                        <Mail className="w-4 h-4 mr-1" /> Outlook / Mail
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
